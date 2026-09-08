@@ -141,10 +141,29 @@ let message = '';             // transient text, e.g. the locked-door hint
 let messageTimer = 0;
 let showMap = true;
 
+// Where the horizon sits. A raycaster cannot really tilt the camera, so
+// looking up and down slides the whole horizon instead. Your eye reads
+// that as tilting your head, and it costs one number.
+let horizon = 0;
+const HORIZON_LIMIT = VIEW_H * 0.38;
+let MOUSE_YAW   = 0.0022;   // radians of turn per pixel of mouse movement
+let MOUSE_PITCH = 0.85;     // pixels of horizon shift per pixel of mouse movement
+let mouseLook = false;      // is the pointer captured right now?
+
+// One place that applies a mouse movement, so it can be tested without
+// needing a real mouse.
+function look(dx, dy) {
+  player.angle += dx * MOUSE_YAW;
+  horizon -= dy * MOUSE_PITCH;
+  if (horizon >  HORIZON_LIMIT) horizon =  HORIZON_LIMIT;
+  if (horizon < -HORIZON_LIMIT) horizon = -HORIZON_LIMIT;
+}
+
 function resetGame() {
   player.x = START_COL + 0.5;
   player.y = START_ROW + 0.5;
-  player.angle = 0;           // facing east, into the maze
+  player.angle = 0;           // facing east, into the dungeon
+  horizon = 0;
   player.health = MAX_HEALTH;
   player.invuln = 0;
   player.keys = 0;
@@ -177,6 +196,18 @@ window.addEventListener('keydown', (e) => {
   if (k === 'm') showMap = !showMap;
 });
 window.addEventListener('keyup', (e) => { held[e.key.toLowerCase()] = false; });
+
+// Click the view to capture the mouse; Escape gives it back.
+canvas.addEventListener('click', () => {
+  if (!mouseLook && canvas.requestPointerLock) canvas.requestPointerLock();
+});
+document.addEventListener('pointerlockchange', () => {
+  mouseLook = (document.pointerLockElement === canvas);
+});
+document.addEventListener('mousemove', (e) => {
+  if (!mouseLook) return;
+  look(e.movementX || 0, e.movementY || 0);
+});
 
 // ---------------------------------------------------------------
 // Moving without walking through walls
@@ -418,7 +449,7 @@ function castWalls() {
     zBuffer[x] = dist;
 
     const height = Math.min(VIEW_H * 4, VIEW_H / dist);
-    const top = (VIEW_H - height) / 2;
+    const top = (VIEW_H - height) / 2 + horizon;
 
     // Walls facing one way are drawn darker than the other, which is
     // what makes corners readable.
@@ -448,7 +479,7 @@ function drawSprite(wx, wy, r, g, b, scale, drop) {
 
   const screenX = (VIEW_W / 2) * (1 + tx / ty);
   const size = (VIEW_H / ty) * scale;
-  const centreY = VIEW_H / 2 + (VIEW_H / ty) * drop;
+  const centreY = VIEW_H / 2 + horizon + (VIEW_H / ty) * drop;
   const top = centreY - size / 2;
   const left = screenX - size / 2;
 
@@ -543,7 +574,7 @@ function drawPerson(wx, wy, tint, awake) {
   const height = Math.min(VIEW_H * 3, (VIEW_H / ty) * 0.82);
   const width = height * (PERSON_W / PERSON_H);
   const left = screenX - width / 2;
-  const top = VIEW_H / 2 + (VIEW_H / ty) * 0.09 - height;   // feet on the floor line
+  const top = VIEW_H / 2 + horizon + (VIEW_H / ty) * 0.09 - height;   // feet on the floor line
 
   const f = fog(ty);
   const from = Math.max(0, Math.floor(left));
@@ -683,7 +714,7 @@ function drawHUD() {
   ctx.textAlign = 'right';
   ctx.font = '12px system-ui, sans-serif';
   ctx.fillStyle = '#5c6478';
-  ctx.fillText('W/S move   A/D turn   M map', VIEW_W - 14, top + HUD_H / 2);
+  ctx.fillText('W/S move   mouse or A/D look   M map', VIEW_W - 14, top + HUD_H / 2);
   ctx.textAlign = 'left';
 }
 
@@ -702,10 +733,11 @@ function drawBanner(title, subtitle, colour) {
 
 function draw() {
   // Ceiling and floor
+  const skyline = Math.max(0, Math.min(VIEW_H, VIEW_H / 2 + horizon));
   ctx.fillStyle = '#131010';
-  ctx.fillRect(0, 0, VIEW_W, VIEW_H / 2);
+  ctx.fillRect(0, 0, VIEW_W, skyline);
   ctx.fillStyle = '#2b2320';
-  ctx.fillRect(0, VIEW_H / 2, VIEW_W, VIEW_H / 2);
+  ctx.fillRect(0, skyline, VIEW_W, VIEW_H - skyline);
 
   castWalls();
   drawSprites();
@@ -716,6 +748,13 @@ function draw() {
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   }
 
+  if (!mouseLook && gameState === 'playing') {
+    ctx.textAlign = 'center';
+    ctx.font = '13px system-ui, sans-serif';
+    ctx.fillStyle = 'rgba(232, 223, 208, 0.55)';
+    ctx.fillText('click to look around with the mouse', VIEW_W / 2, VIEW_H - 16);
+    ctx.textAlign = 'left';
+  }
   drawObjective();
   if (showMap) drawMinimap();
 
