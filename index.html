@@ -54,33 +54,35 @@ canvas.height = VIEW_H + HUD_H;
 // x = 1.5 means "in the middle of column 1".
 // ---------------------------------------------------------------
 const MAP = [
-  '#########################',
-  '#.........#.....#.......#',
-  '#.#######.#.#.#.#.###.#.#',
-  '#.......#.#...#.#...#.#.#',
-  '#.###.#.#.#.###.###.#.#.#',
-  '#.#.#.#...#.#.....#.#.#.E',
-  '#.#.#.#.###.#.###.#.#.###',
-  '#.#.#...#.#...#...#.#...#',
-  '#.#.#####.#.#.#.###.###.#',
-  '#...#.......#.#...#...#.#',
-  '###.#####.###.###.#####.#',
-  '#.#.....#.#.....#...#...#',
-  '#.#####.#.#.###.###.#.###',
-  '#.#.....#...#...#...#...#',
-  '#.#.#####.###.###.#####.#',
-  '#...#...#.#.....#.#...#.#',
-  '#.###.#.#.#.#.#.#.#.#.#.#',
-  '#.....#...#...#.....#...#',
-  '#########################',
+  '#####E#######################',
+  '#.....#...#.................#',
+  '#.#.#.#.#.#######.##.....##.#',
+  '#...#...#.#.....#...........#',
+  '#########.#.###.###......##.#',
+  '#...#.....#...#...#.......#.#',
+  '#.#.#.#####.#.#.#.##......###',
+  '#.#.#...#...#.#.#...#...#...#',
+  '#.#.###.#.###.#.###.#.#.###.#',
+  '#.#...#.#...#.#.......#.....#',
+  '#.###.#.###.#.#############.#',
+  '#...#.#.#...#.........#...#.#',
+  '#.#.###.#.###########.#.###.#',
+  '#.#.....#.........#...#.....#',
+  '#.#.....#########.#.....#####',
+  '#...............#.#.........#',
+  '#.#.....#######.#.#.....###.#',
+  '#.#.............#.#.....#...#',
+  '#.#.###.###.#######.....#.#.#',
+  '#.....#.............#.....#.#',
+  '#############################',
 ];
 
 const COLS = MAP[0].length;
 const ROWS = MAP.length;
 
 const START_COL = 1, START_ROW = 1;
-const ENEMY_SPAWNS = [[17, 2], [21, 12], [16, 17]];
-const KEY_TILES    = [[20, 9], [11, 17], [14, 1]];
+const ENEMY_SPAWNS = [[17, 17], [12, 1], [10, 13]];
+const KEY_TILES    = [[5, 15], [22, 4], [21, 16]];
 const KEYS_NEEDED  = KEY_TILES.length;
 
 function tileAt(col, row) {
@@ -105,8 +107,17 @@ const MAX_HEALTH  = 4;
 const INVULN_TIME = 1.2;
 let MOVE_SPEED    = 3.0;    // tiles per second
 let TURN_SPEED    = 2.6;    // radians per second
-let ENEMY_SPEED   = 1.0;    // slower than you, on purpose
-let ENEMY_SIGHT   = 6.0;    // how many tiles an enemy can see
+
+// Every key you take wakes the dungeon up another notch. The last
+// stage is deliberately faster than you are -- once they see you at
+// that point you cannot outrun them, you have to break line of sight.
+const ENEMY_TIERS = [
+  { speed: 1.4, damage: 1, sight:  5, label: 'PROWLING', colour: [150, 62, 74] },
+  { speed: 2.0, damage: 1, sight:  7, label: 'HUNTING',  colour: [196, 62, 78] },
+  { speed: 2.6, damage: 2, sight:  9, label: 'ENRAGED',  colour: [232, 66, 66] },
+  { speed: 3.3, damage: 3, sight: 10, label: 'FRENZIED', colour: [255, 96, 60] },
+];
+function tier() { return ENEMY_TIERS[Math.min(player.keys, ENEMY_TIERS.length - 1)]; }
 let ALERT_MEMORY  = 2.0;    // seconds it keeps hunting after losing sight of you
 const RADIUS      = 0.22;   // how fat you are, for bumping into walls
 
@@ -213,7 +224,7 @@ function buildFlowField(startCol, startRow) {
 function canSee(fromX, fromY, toX, toY) {
   const dx = toX - fromX, dy = toY - fromY;
   const dist = Math.hypot(dx, dy);
-  if (dist > ENEMY_SIGHT) return false;
+  if (dist > tier().sight) return false;
   const stepCount = Math.ceil(dist / 0.1);
   for (let i = 1; i < stepCount; i++) {
     const t = i / stepCount;
@@ -229,6 +240,10 @@ function pickWanderSpot(enemy) {
     .map(([dc, dr]) => [col + dc, row + dr])
     .filter(([c, r]) => !isWall(c, r));
   if (!open.length) return;
+
+  // Purely random. It must NOT use flowField here -- that is a path
+  // straight to the player, so biasing toward it would let an enemy
+  // that cannot see you still track you through solid walls.
   const [c, r] = open[(Math.random() * open.length) | 0];
   enemy.wanderX = c + 0.5;
   enemy.wanderY = r + 0.5;
@@ -250,13 +265,13 @@ function updateEnemy(enemy, dt) {
       targetX = (step % COLS) + 0.5;
       targetY = ((step / COLS) | 0) + 0.5;
     }
-    speed = ENEMY_SPEED;
+    speed = tier().speed;
   } else {
     // Idle: shuffle around its own patch of the dungeon
     if (Math.hypot(enemy.wanderX - enemy.x, enemy.wanderY - enemy.y) < 0.1) pickWanderSpot(enemy);
     targetX = enemy.wanderX;
     targetY = enemy.wanderY;
-    speed = ENEMY_SPEED * 0.45;
+    speed = tier().speed * 0.45;
   }
 
   const dx = targetX - enemy.x, dy = targetY - enemy.y;
@@ -295,9 +310,9 @@ function update(dt) {
       k.taken = true;
       player.keys += 1;
       message = player.keys < KEYS_NEEDED
-        ? 'Key found  (' + player.keys + '/' + KEYS_NEEDED + ')'
-        : 'All keys found. The exit is open.';
-      messageTimer = 2.5;
+        ? 'Key ' + player.keys + '/' + KEYS_NEEDED + '  -  they are ' + tier().label + ' now'
+        : 'Last key. They are FRENZIED. Get to the door.';
+      messageTimer = 3;
     }
   }
 
@@ -321,7 +336,7 @@ function update(dt) {
   if (player.invuln <= 0) {
     for (const e of enemies) {
       if (Math.hypot(e.x - player.x, e.y - player.y) > 0.45) continue;
-      player.health -= 1;
+      player.health -= tier().damage;
       player.invuln = INVULN_TIME;
       if (player.health <= 0) { player.health = 0; gameState = 'dead'; }
       break;   // one hit per contact, however many pile on
@@ -432,9 +447,10 @@ function drawSprites() {
     Math.hypot(b.x - player.x, b.y - player.y) - Math.hypot(a.x - player.x, a.y - player.y));
 
   for (const s of list) {
-    if (s.kind === 'key')   drawSprite(s.x, s.y, 224, 192, 104, 0.28, 0.18);
-    else if (s.alert)       drawSprite(s.x, s.y, 226, 62, 82,  0.62, 0.0);   // hunting you
-    else                    drawSprite(s.x, s.y, 132, 58, 70,  0.62, 0.0);   // has not seen you
+    if (s.kind === 'key') { drawSprite(s.x, s.y, 224, 192, 104, 0.28, 0.18); continue; }
+    const [er, eg, eb] = tier().colour;
+    if (s.alert) drawSprite(s.x, s.y, er, eg, eb, 0.62, 0.0);                       // hunting you
+    else         drawSprite(s.x, s.y, er * 0.5, eg * 0.5, eb * 0.5, 0.62, 0.0);     // has not seen you
   }
 }
 
@@ -495,6 +511,13 @@ function drawHUD() {
     ctx.fillStyle = i < player.keys ? '#e0c068' : '#2a2f3a';
     ctx.fillRect(310 + i * 22, top + (HUD_H - 15) / 2, 15, 15);
   }
+
+  const t = tier();
+  ctx.fillStyle = '#8b93a7';
+  ctx.font = 'bold 13px system-ui, sans-serif';
+  ctx.fillText('THREAT', 400, top + HUD_H / 2);
+  ctx.fillStyle = 'rgb(' + t.colour[0] + ',' + t.colour[1] + ',' + t.colour[2] + ')';
+  ctx.fillText(t.label + (t.damage > 1 ? '  x' + t.damage : ''), 456, top + HUD_H / 2);
 
   ctx.textAlign = 'right';
   ctx.font = '12px system-ui, sans-serif';
