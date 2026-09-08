@@ -166,6 +166,7 @@ function resetGame() {
   player.y = START_ROW + 0.5;
   player.angle = 0;           // facing east, into the dungeon
   horizon = 0;
+  appliedYaw = 0;
   player.health = MAX_HEALTH;
   player.invuln = 0;
   player.keys = 0;
@@ -213,8 +214,17 @@ window.addEventListener('keyup', (e) => { held[e.key.toLowerCase()] = false; });
 let pointerInView = false;
 let pointerNX = 0, pointerNY = 0;   // -1 .. 1 across the 3D view
 let lockUnavailable = false;
-let LOOK_RATE = 3.2;                // radians per second at full deflection
-const LOOK_DEADZONE = 0.10;         // middle of the screen where you do not turn
+
+// How far the view swings when the cursor is at the edge. Half the field
+// of view means whatever sits under the cursor swings to the middle, so
+// the view lines up with what you are pointing at. Widen this if you
+// want a bigger sweep without touching A/D.
+let LOOK_YAW = Math.atan(0.66);
+
+// How much of the cursor's swing is currently folded into player.angle.
+// Kept separate so we can take it back out cleanly when the cursor moves
+// or leaves, which is what makes this an aim rather than a drift.
+let appliedYaw = 0;
 
 function trackPointer(e) {
   const rect = canvas.getBoundingClientRect();
@@ -231,16 +241,19 @@ canvas.addEventListener('mousemove', trackPointer);
 canvas.addEventListener('mouseenter', trackPointer);
 canvas.addEventListener('mouseleave', () => { pointerInView = false; });
 
-// Applied every frame, so holding the cursor off to one side keeps turning.
-function lookWithCursor(dt) {
-  if (mouseLook || !pointerInView) return;
-  const nx = Math.max(-1, Math.min(1, pointerNX));
-  if (Math.abs(nx) > LOOK_DEADZONE) {
-    const amount = (Math.abs(nx) - LOOK_DEADZONE) / (1 - LOOK_DEADZONE);
-    player.angle += Math.sign(nx) * amount * LOOK_RATE * dt;
+// The view points where the cursor points. Cursor in the middle means
+// straight ahead; move it and the view swings to match; bring it back
+// and the view comes back with it. Nothing drifts on its own.
+function lookWithCursor() {
+  if (mouseLook || !pointerInView) {
+    player.angle -= appliedYaw;      // hand the swing back
+    appliedYaw = 0;
+    return;
   }
-  const ny = Math.max(-1, Math.min(1, pointerNY));
-  horizon = -ny * HORIZON_LIMIT;
+  const want = Math.max(-1, Math.min(1, pointerNX)) * LOOK_YAW;
+  player.angle += want - appliedYaw; // only ever apply the difference
+  appliedYaw = want;
+  horizon = -Math.max(-1, Math.min(1, pointerNY)) * HORIZON_LIMIT;
 }
 
 // A click still tries for a pointer lock. If the browser refuses, we
@@ -383,7 +396,7 @@ function update(dt) {
   if (messageTimer > 0) { messageTimer -= dt; if (messageTimer <= 0) message = ''; }
   if (gameState !== 'playing') return;
 
-  lookWithCursor(dt);
+  lookWithCursor();
 
   // --- turning with the keyboard ---
   let turn = 0;
@@ -765,7 +778,7 @@ function drawHUD() {
   ctx.textAlign = 'right';
   ctx.font = '12px system-ui, sans-serif';
   ctx.fillStyle = '#5c6478';
-  ctx.fillText('W/S move   cursor to look   M map', VIEW_W - 14, top + HUD_H / 2);
+  ctx.fillText('W/S move   cursor aims   A/D turn   M map', VIEW_W - 14, top + HUD_H / 2);
   ctx.textAlign = 'left';
 }
 
@@ -803,7 +816,7 @@ function draw() {
     ctx.textAlign = 'center';
     ctx.font = '13px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(232, 223, 208, 0.5)';
-    ctx.fillText('move the cursor over the view to look around', VIEW_W / 2, VIEW_H - 16);
+    ctx.fillText('move the cursor over the view to aim', VIEW_W / 2, VIEW_H - 16);
     ctx.textAlign = 'left';
   }
   drawObjective();
