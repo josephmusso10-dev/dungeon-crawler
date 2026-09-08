@@ -199,49 +199,63 @@ window.addEventListener('keydown', (e) => {
 });
 window.addEventListener('keyup', (e) => { held[e.key.toLowerCase()] = false; });
 
-// Two ways to look around, because browsers are allowed to refuse the
-// pointer lock that first-person games normally use -- and often do.
+// Looking around follows the cursor while it is over the view. No
+// clicking, no dragging.
 //
-//   1. Drag: hold the left button on the view and move. Needs no
-//      permission, so this always works. This is the one that matters.
-//   2. Captured: if the browser does allow it, a plain click locks the
-//      pointer so you can look without holding a button. Escape releases.
-let dragging = false, dragMoved = 0, lastMouseX = 0, lastMouseY = 0;
+// Sideways is a STEERING RATE, not a direct mapping: the further the
+// cursor sits from the middle, the faster you swing round. That is what
+// lets you turn a full circle even though a real cursor stops dead at
+// the edge of the window. Up and down is mapped directly, so the cursor
+// height is where you are looking, and centring it levels you out.
+//
+// If the browser happens to grant a pointer lock (many refuse), we use
+// raw mouse movement instead, which is nicer still.
+let pointerInView = false;
+let pointerNX = 0, pointerNY = 0;   // -1 .. 1 across the 3D view
 let lockUnavailable = false;
+let LOOK_RATE = 3.2;                // radians per second at full deflection
+const LOOK_DEADZONE = 0.10;         // middle of the screen where you do not turn
 
-canvas.addEventListener('mousedown', (e) => {
-  if (e.button !== 0) return;
-  e.preventDefault();
-  dragging = true;
-  dragMoved = 0;
-  lastMouseX = e.clientX;
-  lastMouseY = e.clientY;
-});
+function trackPointer(e) {
+  const rect = canvas.getBoundingClientRect();
+  if (!rect.width || !rect.height) return;
+  const viewH = rect.height * (VIEW_H / canvas.height);   // the 3D part, above the HUD
+  const x = e.clientX - rect.left;
+  const y = e.clientY - rect.top;
+  pointerNX = (x / rect.width) * 2 - 1;
+  pointerNY = (y / viewH) * 2 - 1;
+  pointerInView = x >= 0 && x <= rect.width && y >= 0 && y <= viewH;
+}
 
-window.addEventListener('mouseup', () => {
-  if (!dragging) return;
-  dragging = false;
-  // A click that did not drag is a request to capture the pointer.
-  if (dragMoved < 5 && !mouseLook && !lockUnavailable && canvas.requestPointerLock) {
-    const p = canvas.requestPointerLock();
-    if (p && p.catch) p.catch(() => { lockUnavailable = true; });
+canvas.addEventListener('mousemove', trackPointer);
+canvas.addEventListener('mouseenter', trackPointer);
+canvas.addEventListener('mouseleave', () => { pointerInView = false; });
+
+// Applied every frame, so holding the cursor off to one side keeps turning.
+function lookWithCursor(dt) {
+  if (mouseLook || !pointerInView) return;
+  const nx = Math.max(-1, Math.min(1, pointerNX));
+  if (Math.abs(nx) > LOOK_DEADZONE) {
+    const amount = (Math.abs(nx) - LOOK_DEADZONE) / (1 - LOOK_DEADZONE);
+    player.angle += Math.sign(nx) * amount * LOOK_RATE * dt;
   }
-});
+  const ny = Math.max(-1, Math.min(1, pointerNY));
+  horizon = -ny * HORIZON_LIMIT;
+}
 
+// A click still tries for a pointer lock. If the browser refuses, we
+// notice once and stop asking.
+canvas.addEventListener('click', () => {
+  if (mouseLook || lockUnavailable || !canvas.requestPointerLock) return;
+  const p = canvas.requestPointerLock();
+  if (p && p.catch) p.catch(() => { lockUnavailable = true; });
+});
 document.addEventListener('pointerlockchange', () => {
   mouseLook = (document.pointerLockElement === canvas);
 });
 document.addEventListener('pointerlockerror', () => { lockUnavailable = true; });
-
 document.addEventListener('mousemove', (e) => {
-  if (mouseLook) { look(e.movementX || 0, e.movementY || 0); return; }
-  if (!dragging) return;
-  const dx = e.clientX - lastMouseX;
-  const dy = e.clientY - lastMouseY;
-  lastMouseX = e.clientX;
-  lastMouseY = e.clientY;
-  dragMoved += Math.abs(dx) + Math.abs(dy);
-  look(dx, dy);
+  if (mouseLook) look(e.movementX || 0, e.movementY || 0);
 });
 
 // ---------------------------------------------------------------
@@ -369,7 +383,9 @@ function update(dt) {
   if (messageTimer > 0) { messageTimer -= dt; if (messageTimer <= 0) message = ''; }
   if (gameState !== 'playing') return;
 
-  // --- turning ---
+  lookWithCursor(dt);
+
+  // --- turning with the keyboard ---
   let turn = 0;
   if (held['arrowleft']  || held['a']) turn -= 1;
   if (held['arrowright'] || held['d']) turn += 1;
@@ -749,7 +765,7 @@ function drawHUD() {
   ctx.textAlign = 'right';
   ctx.font = '12px system-ui, sans-serif';
   ctx.fillStyle = '#5c6478';
-  ctx.fillText('W/S move   drag or A/D look   M map', VIEW_W - 14, top + HUD_H / 2);
+  ctx.fillText('W/S move   cursor to look   M map', VIEW_W - 14, top + HUD_H / 2);
   ctx.textAlign = 'left';
 }
 
@@ -783,13 +799,11 @@ function draw() {
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   }
 
-  if (gameState === 'playing' && !mouseLook && !dragging) {
+  if (gameState === 'playing' && !mouseLook && !pointerInView) {
     ctx.textAlign = 'center';
     ctx.font = '13px system-ui, sans-serif';
-    ctx.fillStyle = 'rgba(232, 223, 208, 0.55)';
-    ctx.fillText(lockUnavailable ? 'drag to look around'
-                                 : 'drag to look around, or click to capture the mouse',
-                 VIEW_W / 2, VIEW_H - 16);
+    ctx.fillStyle = 'rgba(232, 223, 208, 0.5)';
+    ctx.fillText('move the cursor over the view to look around', VIEW_W / 2, VIEW_H - 16);
     ctx.textAlign = 'left';
   }
   drawObjective();
