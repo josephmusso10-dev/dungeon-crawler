@@ -5,10 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Dungeon Crawler</title>
 <style>
-  html, body {
-    height: 100%;
-    margin: 0;
-  }
+  html, body { height: 100%; margin: 0; }
   body {
     background: #14161a;
     display: flex;
@@ -19,7 +16,6 @@
     background: #000;
     border: 2px solid #3a4152;
     border-radius: 4px;
-    image-rendering: pixelated;
   }
 </style>
 </head>
@@ -28,19 +24,34 @@
 <canvas id="game"></canvas>
 
 <script>
-// ---------------------------------------------------------------
-// Setup
-// ---------------------------------------------------------------
+// ===============================================================
+// A first-person dungeon crawler drawn with raycasting.
+//
+// The whole 3D effect is one idea: for every vertical strip of the
+// screen, fire a ray out into the maze and see how far it travels
+// before hitting a wall. Close wall -> draw a tall strip. Far wall
+// -> draw a short strip. Do that 800 times across the screen and
+// your eye reads it as a corridor. This is how Wolfenstein 3D
+// worked in 1992, and it is still the simplest honest 3D there is.
+//
+// The map underneath is exactly the same grid of characters we
+// used when the game was top-down. Nothing about the maze changed.
+// ===============================================================
+
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
-const TILE = 32;    // every tile is a 32x32 square
-const HUD_H = 44;   // strip along the bottom for the health bar
+const VIEW_W = 800;   // width of the 3D view
+const VIEW_H = 460;   // height of the 3D view
+const HUD_H  = 52;    // strip along the bottom
+
+canvas.width  = VIEW_W;
+canvas.height = VIEW_H + HUD_H;
 
 // ---------------------------------------------------------------
-// The dungeon
-// '#' wall, '.' floor, 'E' the exit you're trying to reach.
-// Every floor tile connects, so the exit is always reachable.
+// The dungeon. '#' wall, '.' floor, 'E' the exit door.
+// One unit = one tile. The player's position is a decimal, so
+// x = 1.5 means "in the middle of column 1".
 // ---------------------------------------------------------------
 const MAP = [
   '#########################',
@@ -67,305 +78,468 @@ const MAP = [
 const COLS = MAP[0].length;
 const ROWS = MAP.length;
 
-canvas.width  = COLS * TILE;
-canvas.height = ROWS * TILE + HUD_H;
-
 const START_COL = 1, START_ROW = 1;
 const ENEMY_SPAWNS = [[17, 2], [21, 12], [16, 17]];
+const KEY_TILES    = [[20, 9], [11, 17], [14, 1]];
+const KEYS_NEEDED  = KEY_TILES.length;
 
 function tileAt(col, row) {
   if (col < 0 || row < 0 || col >= COLS || row >= ROWS) return '#';
   return MAP[row][col];
 }
-function isWall(col, row) { return tileAt(col, row) === '#'; }
-function isExit(col, row) { return tileAt(col, row) === 'E'; }
+// The exit door counts as a wall: it blocks you and it gets drawn
+// like a wall, just in its own colour.
+function isWall(col, row) {
+  const t = tileAt(col, row);
+  return t === '#' || t === 'E';
+}
+function isDoor(col, row) { return tileAt(col, row) === 'E'; }
+
+let doorCol = 0, doorRow = 0;
+for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (isDoor(c, r)) { doorCol = c; doorRow = r; }
 
 // ---------------------------------------------------------------
-// Player and enemies
+// Player, enemies, keys
 // ---------------------------------------------------------------
-const MAX_HEALTH = 4;      // four hits and you're done
-const INVULN_TIME = 1.2;   // seconds of mercy after taking a hit
+const MAX_HEALTH  = 4;
+const INVULN_TIME = 1.2;
+let MOVE_SPEED    = 3.0;    // tiles per second
+let TURN_SPEED    = 2.6;    // radians per second
+let ENEMY_SPEED   = 1.0;    // slower than you, on purpose
+let ENEMY_SIGHT   = 6.0;    // how many tiles an enemy can see
+let ALERT_MEMORY  = 2.0;    // seconds it keeps hunting after losing sight of you
+const RADIUS      = 0.22;   // how fat you are, for bumping into walls
 
-const player = {
-  x: 0, y: 0,
-  size: 20,
-  speed: 160,      // pixels per second
-  health: MAX_HEALTH,
-  invuln: 0,
-};
+const player = { x: 0, y: 0, angle: 0, health: MAX_HEALTH, invuln: 0, keys: 0 };
 
 let enemies = [];
-let gameState = 'playing';   // 'playing' | 'won' | 'dead'
-
-// Drop an entity neatly into the middle of a tile
-function placeOnTile(entity, col, row) {
-  entity.x = col * TILE + (TILE - entity.size) / 2;
-  entity.y = row * TILE + (TILE - entity.size) / 2;
-}
+let keys3d  = [];
+let gameState = 'playing';    // 'playing' | 'won' | 'dead'
+let message = '';             // transient text, e.g. the locked-door hint
+let messageTimer = 0;
+let showMap = true;
 
 function resetGame() {
-  placeOnTile(player, START_COL, START_ROW);
+  player.x = START_COL + 0.5;
+  player.y = START_ROW + 0.5;
+  player.angle = 0;           // facing east, into the maze
   player.health = MAX_HEALTH;
   player.invuln = 0;
+  player.keys = 0;
 
-  enemies = ENEMY_SPAWNS.map(([col, row]) => {
-    const e = { x: 0, y: 0, size: 20, speed: 70 };  // slower than you, on purpose
-    placeOnTile(e, col, row);
-    return e;
-  });
+  enemies = ENEMY_SPAWNS.map(([c, r]) => ({
+    x: c + 0.5, y: r + 0.5,
+    alert: 0,          // seconds left of actively hunting you
+    wanderX: c + 0.5,  // where it is ambling to while it has not seen you
+    wanderY: r + 0.5,
+  }));
+  keys3d  = KEY_TILES.map(([c, r]) => ({ x: c + 0.5, y: r + 0.5, taken: false }));
 
   flowField = null;
   repathTimer = 0;
+  message = '';
+  messageTimer = 0;
   gameState = 'playing';
 }
 
 // ---------------------------------------------------------------
-// Keyboard input
+// Keyboard
 // ---------------------------------------------------------------
-const keys = {};
-
+const held = {};
 window.addEventListener('keydown', (e) => {
-  if (e.key.startsWith('Arrow')) e.preventDefault();  // stop the page scrolling
-  keys[e.key.toLowerCase()] = true;
-  if (e.key.toLowerCase() === 'r' && gameState !== 'playing') resetGame();
+  if (e.key.startsWith('Arrow')) e.preventDefault();
+  const k = e.key.toLowerCase();
+  held[k] = true;
+  if (k === 'r' && gameState !== 'playing') resetGame();
+  if (k === 'm') showMap = !showMap;
 });
-
-window.addEventListener('keyup', (e) => {
-  keys[e.key.toLowerCase()] = false;
-});
+window.addEventListener('keyup', (e) => { held[e.key.toLowerCase()] = false; });
 
 // ---------------------------------------------------------------
-// Movement + wall collision
+// Moving without walking through walls
 //
-// Move one axis at a time. If we end up inside a wall, push back
-// out of it. Doing X and Y separately is what lets you slide along
-// a wall instead of catching on it.
+// Same trick as the top-down version: try each axis separately, so
+// brushing a wall slides you along it instead of stopping you dead.
 // ---------------------------------------------------------------
-function moveEntity(entity, dx, dy) {
-  entity.x += dx;
-  entity.y += dy;
-
-  const left   = Math.floor(entity.x / TILE);
-  const right  = Math.floor((entity.x + entity.size - 1) / TILE);
-  const top    = Math.floor(entity.y / TILE);
-  const bottom = Math.floor((entity.y + entity.size - 1) / TILE);
-
-  for (let row = top; row <= bottom; row++) {
-    for (let col = left; col <= right; col++) {
-      if (!isWall(col, row)) continue;
-      if (dx > 0)      entity.x = col * TILE - entity.size;
-      else if (dx < 0) entity.x = (col + 1) * TILE;
-      else if (dy > 0) entity.y = row * TILE - entity.size;
-      else if (dy < 0) entity.y = (row + 1) * TILE;
-    }
-  }
+function blocked(x, y) {
+  return isWall(Math.floor(x - RADIUS), Math.floor(y - RADIUS)) ||
+         isWall(Math.floor(x + RADIUS), Math.floor(y - RADIUS)) ||
+         isWall(Math.floor(x - RADIUS), Math.floor(y + RADIUS)) ||
+         isWall(Math.floor(x + RADIUS), Math.floor(y + RADIUS));
 }
-
-// Which tile is the middle of this thing standing on?
-function tileOf(entity) {
-  return {
-    col: Math.floor((entity.x + entity.size / 2) / TILE),
-    row: Math.floor((entity.y + entity.size / 2) / TILE),
-  };
-}
-
-function overlaps(a, b) {
-  return a.x < b.x + b.size && a.x + a.size > b.x &&
-         a.y < b.y + b.size && a.y + a.size > b.y;
+function moveBody(body, dx, dy) {
+  if (!blocked(body.x + dx, body.y)) body.x += dx;
+  if (!blocked(body.x, body.y + dy)) body.y += dy;
 }
 
 // ---------------------------------------------------------------
-// Enemy pathfinding
+// Enemy pathfinding (unchanged from the top-down version)
 //
-// Once every fraction of a second we flood outward from the player,
-// tile by tile, recording for each tile which neighbour is one step
-// closer. That map is the "flow field". Every enemy then just walks
-// downhill along it, so they chase you through the maze properly
-// instead of grinding into a wall between you and them.
-//
-// One flood serves all the enemies, so adding more is nearly free.
+// Flood outward from the player tile by tile, recording for each
+// tile which neighbour is one step closer. Enemies walk downhill
+// on that. One flood serves every enemy.
 // ---------------------------------------------------------------
 const DIRECTIONS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
-const REPATH_INTERVAL = 0.25;   // seconds between recalculations
-
+const REPATH_INTERVAL = 0.25;
 let flowField = null;
 let repathTimer = 0;
 
 function buildFlowField(startCol, startRow) {
   const next = new Int32Array(COLS * ROWS).fill(-1);
   const seen = new Uint8Array(COLS * ROWS);
-
   const start = startRow * COLS + startCol;
   const queue = [start];
   seen[start] = 1;
 
   for (let head = 0; head < queue.length; head++) {
     const here = queue[head];
-    const col = here % COLS;
-    const row = (here / COLS) | 0;
-
+    const col = here % COLS, row = (here / COLS) | 0;
     for (const [dc, dr] of DIRECTIONS) {
       const nc = col + dc, nr = row + dr;
       if (isWall(nc, nr)) continue;
       const there = nr * COLS + nc;
       if (seen[there]) continue;
       seen[there] = 1;
-      next[there] = here;    // from 'there', stepping to 'here' gets you closer
+      next[there] = here;
       queue.push(there);
     }
   }
   return next;
 }
 
-function updateEnemy(enemy, dt) {
-  const { col, row } = tileOf(enemy);
-  const step = flowField ? flowField[row * COLS + col] : -1;
+// Can this thing actually see you, or is there a wall in the way?
+// We walk in small steps from it to you and stop if we hit anything.
+// Same idea as the rays we draw the walls with, just one ray.
+function canSee(fromX, fromY, toX, toY) {
+  const dx = toX - fromX, dy = toY - fromY;
+  const dist = Math.hypot(dx, dy);
+  if (dist > ENEMY_SIGHT) return false;
+  const stepCount = Math.ceil(dist / 0.1);
+  for (let i = 1; i < stepCount; i++) {
+    const t = i / stepCount;
+    if (isWall(Math.floor(fromX + dx * t), Math.floor(fromY + dy * t))) return false;
+  }
+  return true;
+}
 
-  let targetX, targetY;
-  if (step === -1) {
-    // Same tile as the player (or nowhere to go) — just head straight at them
-    targetX = player.x;
-    targetY = player.y;
+// Somewhere new to amble to while it has not spotted you
+function pickWanderSpot(enemy) {
+  const col = Math.floor(enemy.x), row = Math.floor(enemy.y);
+  const open = DIRECTIONS
+    .map(([dc, dr]) => [col + dc, row + dr])
+    .filter(([c, r]) => !isWall(c, r));
+  if (!open.length) return;
+  const [c, r] = open[(Math.random() * open.length) | 0];
+  enemy.wanderX = c + 0.5;
+  enemy.wanderY = r + 0.5;
+}
+
+function updateEnemy(enemy, dt) {
+  // Spot you, and remember you for a few seconds after you break away
+  if (canSee(enemy.x, enemy.y, player.x, player.y)) enemy.alert = ALERT_MEMORY;
+  else if (enemy.alert > 0) enemy.alert -= dt;
+
+  let targetX, targetY, speed;
+
+  if (enemy.alert > 0) {
+    // Hunting: follow the flow field straight to you
+    const col = Math.floor(enemy.x), row = Math.floor(enemy.y);
+    const step = flowField ? flowField[row * COLS + col] : -1;
+    if (step === -1) { targetX = player.x; targetY = player.y; }
+    else {
+      targetX = (step % COLS) + 0.5;
+      targetY = ((step / COLS) | 0) + 0.5;
+    }
+    speed = ENEMY_SPEED;
   } else {
-    const tc = step % COLS;
-    const tr = (step / COLS) | 0;
-    targetX = tc * TILE + (TILE - enemy.size) / 2;
-    targetY = tr * TILE + (TILE - enemy.size) / 2;
+    // Idle: shuffle around its own patch of the dungeon
+    if (Math.hypot(enemy.wanderX - enemy.x, enemy.wanderY - enemy.y) < 0.1) pickWanderSpot(enemy);
+    targetX = enemy.wanderX;
+    targetY = enemy.wanderY;
+    speed = ENEMY_SPEED * 0.45;
   }
 
-  const dx = targetX - enemy.x;
-  const dy = targetY - enemy.y;
+  const dx = targetX - enemy.x, dy = targetY - enemy.y;
   const length = Math.hypot(dx, dy);
-  if (length < 0.5) return;
-
-  const distance = Math.min(enemy.speed * dt, length);
-  moveEntity(enemy, (dx / length) * distance, 0);
-  moveEntity(enemy, 0, (dy / length) * distance);
+  if (length < 0.001) return;
+  const distance = Math.min(speed * dt, length);
+  moveBody(enemy, (dx / length) * distance, (dy / length) * distance);
 }
 
 // ---------------------------------------------------------------
 // One step of the game
 // ---------------------------------------------------------------
 function update(dt) {
+  if (messageTimer > 0) { messageTimer -= dt; if (messageTimer <= 0) message = ''; }
   if (gameState !== 'playing') return;
 
-  // --- move the player ---
-  let dx = 0, dy = 0;
-  if (keys['arrowleft']  || keys['a']) dx -= 1;
-  if (keys['arrowright'] || keys['d']) dx += 1;
-  if (keys['arrowup']    || keys['w']) dy -= 1;
-  if (keys['arrowdown']  || keys['s']) dy += 1;
+  // --- turning ---
+  let turn = 0;
+  if (held['arrowleft']  || held['a']) turn -= 1;
+  if (held['arrowright'] || held['d']) turn += 1;
+  player.angle += turn * TURN_SPEED * dt;
 
-  // Without this, moving diagonally would be about 40% faster
-  if (dx !== 0 && dy !== 0) { dx *= 0.7071; dy *= 0.7071; }
-
-  const distance = player.speed * dt;
-  if (dx !== 0) moveEntity(player, dx * distance, 0);
-  if (dy !== 0) moveEntity(player, 0, dy * distance);
-
-  // --- did we escape? ---
-  const here = tileOf(player);
-  if (isExit(here.col, here.row)) {
-    gameState = 'won';
-    return;
+  // --- walking ---
+  let walk = 0;
+  if (held['arrowup']   || held['w']) walk += 1;
+  if (held['arrowdown'] || held['s']) walk -= 1;
+  if (walk !== 0) {
+    const step = walk * MOVE_SPEED * dt;
+    moveBody(player, Math.cos(player.angle) * step, Math.sin(player.angle) * step);
   }
 
-  // --- move the enemies ---
+  // --- picking up keys ---
+  for (const k of keys3d) {
+    if (k.taken) continue;
+    if (Math.hypot(k.x - player.x, k.y - player.y) < 0.5) {
+      k.taken = true;
+      player.keys += 1;
+      message = player.keys < KEYS_NEEDED
+        ? 'Key found  (' + player.keys + '/' + KEYS_NEEDED + ')'
+        : 'All keys found. The exit is open.';
+      messageTimer = 2.5;
+    }
+  }
+
+  // --- the door ---
+  const toDoor = Math.hypot((doorCol + 0.5) - player.x, (doorRow + 0.5) - player.y);
+  if (toDoor < 1.2) {
+    if (player.keys >= KEYS_NEEDED) { gameState = 'won'; return; }
+    if (messageTimer <= 0) { message = 'Locked. Find all ' + KEYS_NEEDED + ' keys.'; messageTimer = 1.5; }
+  }
+
+  // --- enemies ---
   repathTimer -= dt;
   if (repathTimer <= 0) {
-    flowField = buildFlowField(here.col, here.row);
+    flowField = buildFlowField(Math.floor(player.x), Math.floor(player.y));
     repathTimer = REPATH_INTERVAL;
   }
-  for (const enemy of enemies) updateEnemy(enemy, dt);
+  for (const e of enemies) updateEnemy(e, dt);
 
   // --- getting hit ---
   if (player.invuln > 0) player.invuln -= dt;
-
   if (player.invuln <= 0) {
-    for (const enemy of enemies) {
-      if (!overlaps(player, enemy)) continue;
+    for (const e of enemies) {
+      if (Math.hypot(e.x - player.x, e.y - player.y) > 0.45) continue;
       player.health -= 1;
       player.invuln = INVULN_TIME;
-      if (player.health <= 0) {
-        player.health = 0;
-        gameState = 'dead';
-      }
-      break;   // only one hit per contact, however many enemies pile on
+      if (player.health <= 0) { player.health = 0; gameState = 'dead'; }
+      break;   // one hit per contact, however many pile on
     }
   }
 }
 
-// ---------------------------------------------------------------
+// ===============================================================
 // Drawing
-// ---------------------------------------------------------------
-function drawHUD() {
-  const top = ROWS * TILE;
-  ctx.fillStyle = '#0e1013';
-  ctx.fillRect(0, top, canvas.width, HUD_H);
+// ===============================================================
+const zBuffer = new Float64Array(VIEW_W);   // wall distance per screen column
 
-  ctx.fillStyle = '#8b93a7';
-  ctx.font = 'bold 13px system-ui, sans-serif';
-  ctx.textBaseline = 'middle';
-  ctx.fillText('HEALTH', 14, top + HUD_H / 2);
+function shade(r, g, b, f) {
+  return 'rgb(' + (r*f|0) + ',' + (g*f|0) + ',' + (b*f|0) + ')';
+}
+// Things far away fade into the dark. This is most of what sells depth.
+function fog(dist) {
+  return Math.max(0.15, Math.min(1, 1.35 - dist / 11));
+}
 
-  // One block per hit you can still take
-  const blockW = 42, blockH = 16, gap = 6, startX = 82;
-  for (let i = 0; i < MAX_HEALTH; i++) {
-    const x = startX + i * (blockW + gap);
-    const y = top + (HUD_H - blockH) / 2;
-    ctx.fillStyle = i < player.health ? '#d1495b' : '#2a2f3a';
-    ctx.fillRect(x, y, blockW, blockH);
+function castWalls() {
+  // Direction the player faces, plus a "camera plane" at right angles
+  // to it. Sweeping across that plane is what gives us a field of view.
+  const dirX = Math.cos(player.angle), dirY = Math.sin(player.angle);
+  const planeX = -dirY * 0.66, planeY = dirX * 0.66;   // 0.66 -> about a 66 degree view
+
+  for (let x = 0; x < VIEW_W; x++) {
+    // -1 at the left edge of the screen, +1 at the right edge
+    const cameraX = 2 * x / VIEW_W - 1;
+    const rayX = dirX + planeX * cameraX;
+    const rayY = dirY + planeY * cameraX;
+
+    let mapX = Math.floor(player.x), mapY = Math.floor(player.y);
+
+    // How far along the ray you travel to cross one full tile
+    const deltaX = Math.abs(1 / rayX), deltaY = Math.abs(1 / rayY);
+
+    let stepX, stepY, sideX, sideY;
+    if (rayX < 0) { stepX = -1; sideX = (player.x - mapX) * deltaX; }
+    else          { stepX =  1; sideX = (mapX + 1 - player.x) * deltaX; }
+    if (rayY < 0) { stepY = -1; sideY = (player.y - mapY) * deltaY; }
+    else          { stepY =  1; sideY = (mapY + 1 - player.y) * deltaY; }
+
+    // Walk the ray tile by tile until it hits something
+    let side = 0, guard = 0;
+    while (guard++ < 128) {
+      if (sideX < sideY) { sideX += deltaX; mapX += stepX; side = 0; }
+      else               { sideY += deltaY; mapY += stepY; side = 1; }
+      if (isWall(mapX, mapY)) break;
+    }
+
+    // Distance measured straight ahead, not along the ray. Using the
+    // ray length instead would bow the walls outward (fisheye).
+    const dist = side === 0 ? (sideX - deltaX) : (sideY - deltaY);
+    zBuffer[x] = dist;
+
+    const height = Math.min(VIEW_H * 4, VIEW_H / dist);
+    const top = (VIEW_H - height) / 2;
+
+    // Walls facing one way are drawn darker than the other, which is
+    // what makes corners readable.
+    let f = fog(dist) * (side === 1 ? 0.72 : 1);
+    if (isDoor(mapX, mapY)) {
+      // The way out: red while locked, green once you have every key
+      if (player.keys >= KEYS_NEEDED) ctx.fillStyle = shade(76, 200, 90, f);
+      else                            ctx.fillStyle = shade(190, 60, 70, f);
+    } else {
+      ctx.fillStyle = shade(92, 102, 128, f);
+    }
+    ctx.fillRect(x, top, 1, height);
+  }
+}
+
+// Draw a flat coloured square out in the world (a key or an enemy),
+// hiding whatever parts of it are behind a wall.
+function drawSprite(wx, wy, r, g, b, scale, drop) {
+  const dirX = Math.cos(player.angle), dirY = Math.sin(player.angle);
+  const planeX = -dirY * 0.66, planeY = dirX * 0.66;
+
+  const sx = wx - player.x, sy = wy - player.y;
+  const invDet = 1 / (planeX * dirY - dirX * planeY);
+  const tx = invDet * (dirY * sx - dirX * sy);       // sideways offset
+  const ty = invDet * (-planeY * sx + planeX * sy);  // depth into the screen
+  if (ty <= 0.08) return;                            // behind us
+
+  const screenX = (VIEW_W / 2) * (1 + tx / ty);
+  const size = (VIEW_H / ty) * scale;
+  const centreY = VIEW_H / 2 + (VIEW_H / ty) * drop;
+  const top = centreY - size / 2;
+  const left = screenX - size / 2;
+
+  const f = fog(ty);
+  ctx.fillStyle = shade(r, g, b, f);
+  const from = Math.max(0, Math.floor(left));
+  const to   = Math.min(VIEW_W, Math.ceil(left + size));
+  for (let x = from; x < to; x++) {
+    if (ty >= zBuffer[x]) continue;    // a wall is in front of this column
+    ctx.fillRect(x, top, 1, size);
+  }
+}
+
+function drawSprites() {
+  // Furthest first, so nearer things paint over them
+  const list = [];
+  for (const k of keys3d) if (!k.taken) list.push({ x: k.x, y: k.y, kind: 'key' });
+  for (const e of enemies) list.push({ x: e.x, y: e.y, kind: 'enemy', alert: e.alert > 0 });
+  list.sort((a, b) =>
+    Math.hypot(b.x - player.x, b.y - player.y) - Math.hypot(a.x - player.x, a.y - player.y));
+
+  for (const s of list) {
+    if (s.kind === 'key')   drawSprite(s.x, s.y, 224, 192, 104, 0.28, 0.18);
+    else if (s.alert)       drawSprite(s.x, s.y, 226, 62, 82,  0.62, 0.0);   // hunting you
+    else                    drawSprite(s.x, s.y, 132, 58, 70,  0.62, 0.0);   // has not seen you
+  }
+}
+
+function drawMinimap() {
+  const scale = 5, pad = 10;
+  const w = COLS * scale, h = ROWS * scale;
+  const ox = VIEW_W - w - pad, oy = pad;
+
+  ctx.globalAlpha = 0.85;
+  ctx.fillStyle = '#0b0d11';
+  ctx.fillRect(ox - 3, oy - 3, w + 6, h + 6);
+
+  for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
+    if (isDoor(c, r))      ctx.fillStyle = player.keys >= KEYS_NEEDED ? '#4caf50' : '#bd3c46';
+    else if (isWall(c, r)) ctx.fillStyle = '#39404f';
+    else                   ctx.fillStyle = '#191d24';
+    ctx.fillRect(ox + c * scale, oy + r * scale, scale, scale);
   }
 
-  ctx.fillStyle = '#5c6478';
-  ctx.font = '12px system-ui, sans-serif';
+  for (const k of keys3d) {
+    if (k.taken) continue;
+    ctx.fillStyle = '#e0c068';
+    ctx.fillRect(ox + k.x * scale - 2, oy + k.y * scale - 2, 4, 4);
+  }
+
+  // You, and the way you are looking
+  ctx.fillStyle = '#8fd8ff';
+  ctx.fillRect(ox + player.x * scale - 2, oy + player.y * scale - 2, 4, 4);
+  ctx.strokeStyle = '#8fd8ff';
+  ctx.beginPath();
+  ctx.moveTo(ox + player.x * scale, oy + player.y * scale);
+  ctx.lineTo(ox + (player.x + Math.cos(player.angle) * 2.2) * scale,
+             oy + (player.y + Math.sin(player.angle) * 2.2) * scale);
+  ctx.stroke();
+  ctx.globalAlpha = 1;
+}
+
+function drawHUD() {
+  const top = VIEW_H;
+  ctx.fillStyle = '#0e1013';
+  ctx.fillRect(0, top, VIEW_W, HUD_H);
+
+  ctx.textBaseline = 'middle';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = '#8b93a7';
+  ctx.font = 'bold 13px system-ui, sans-serif';
+  ctx.fillText('HEALTH', 14, top + HUD_H / 2);
+
+  const bw = 38, bh = 15, gap = 5, sx = 82;
+  for (let i = 0; i < MAX_HEALTH; i++) {
+    ctx.fillStyle = i < player.health ? '#d1495b' : '#2a2f3a';
+    ctx.fillRect(sx + i * (bw + gap), top + (HUD_H - bh) / 2, bw, bh);
+  }
+
+  ctx.fillStyle = '#8b93a7';
+  ctx.fillText('KEYS', 268, top + HUD_H / 2);
+  for (let i = 0; i < KEYS_NEEDED; i++) {
+    ctx.fillStyle = i < player.keys ? '#e0c068' : '#2a2f3a';
+    ctx.fillRect(310 + i * 22, top + (HUD_H - 15) / 2, 15, 15);
+  }
+
   ctx.textAlign = 'right';
-  ctx.fillText('Reach the green exit', canvas.width - 14, top + HUD_H / 2);
+  ctx.font = '12px system-ui, sans-serif';
+  ctx.fillStyle = '#5c6478';
+  ctx.fillText('W/S move   A/D turn   M map', VIEW_W - 14, top + HUD_H / 2);
   ctx.textAlign = 'left';
 }
 
 function drawBanner(title, subtitle, colour) {
-  ctx.fillStyle = 'rgba(10, 12, 16, 0.82)';
-  ctx.fillRect(0, 0, canvas.width, ROWS * TILE);
-
+  ctx.fillStyle = 'rgba(10,12,16,0.84)';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   ctx.textAlign = 'center';
   ctx.fillStyle = colour;
   ctx.font = 'bold 44px system-ui, sans-serif';
-  ctx.fillText(title, canvas.width / 2, ROWS * TILE / 2 - 16);
-
+  ctx.fillText(title, VIEW_W / 2, VIEW_H / 2 - 16);
   ctx.fillStyle = '#c8cede';
   ctx.font = '17px system-ui, sans-serif';
-  ctx.fillText(subtitle, canvas.width / 2, ROWS * TILE / 2 + 26);
+  ctx.fillText(subtitle, VIEW_W / 2, VIEW_H / 2 + 26);
   ctx.textAlign = 'left';
 }
 
 function draw() {
-  // The dungeon
-  for (let row = 0; row < ROWS; row++) {
-    for (let col = 0; col < COLS; col++) {
-      if (isWall(col, row))      ctx.fillStyle = '#3a4152';
-      else if (isExit(col, row)) ctx.fillStyle = '#4caf50';
-      else                       ctx.fillStyle = '#21262e';
-      ctx.fillRect(col * TILE, row * TILE, TILE, TILE);
+  // Ceiling and floor
+  ctx.fillStyle = '#171b21';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H / 2);
+  ctx.fillStyle = '#23272f';
+  ctx.fillRect(0, VIEW_H / 2, VIEW_W, VIEW_H / 2);
 
-      if (isExit(col, row)) {
-        ctx.fillStyle = '#a5f0a8';
-        ctx.fillRect(col * TILE + 10, row * TILE + 10, TILE - 20, TILE - 20);
-      }
-    }
+  castWalls();
+  drawSprites();
+
+  // A red wash when you have just been hit
+  if (player.invuln > 0) {
+    ctx.fillStyle = 'rgba(209,73,91,' + (0.32 * (player.invuln / INVULN_TIME)).toFixed(3) + ')';
+    ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   }
 
-  // Enemies
-  ctx.fillStyle = '#d1495b';
-  for (const enemy of enemies) {
-    ctx.fillRect(enemy.x, enemy.y, enemy.size, enemy.size);
-  }
+  if (showMap) drawMinimap();
 
-  // Player. While invulnerable we blink, so a hit is obvious.
-  const blinking = player.invuln > 0 && Math.floor(player.invuln * 10) % 2 === 0;
-  if (!blinking) {
-    ctx.fillStyle = '#e0c068';
-    ctx.fillRect(player.x, player.y, player.size, player.size);
+  if (message) {
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 16px system-ui, sans-serif';
+    ctx.fillStyle = '#e6ebf5';
+    ctx.fillText(message, VIEW_W / 2, VIEW_H - 34);
+    ctx.textAlign = 'left';
   }
 
   drawHUD();
@@ -375,10 +549,9 @@ function draw() {
 }
 
 // ---------------------------------------------------------------
-// The game loop: update, draw, repeat ~60 times a second
+// The game loop
 // ---------------------------------------------------------------
 let lastTime = performance.now();
-
 function frame(now) {
   const dt = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
