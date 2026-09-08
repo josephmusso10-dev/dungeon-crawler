@@ -19,14 +19,13 @@
     background: #000;
     border: 2px solid #3a4152;
     border-radius: 4px;
-    /* Keeps the pixel art crisp instead of blurry when scaled */
     image-rendering: pixelated;
   }
 </style>
 </head>
 <body>
 
-<canvas id="game" width="640" height="480"></canvas>
+<canvas id="game"></canvas>
 
 <script>
 // ---------------------------------------------------------------
@@ -35,62 +34,100 @@
 const canvas = document.getElementById('game');
 const ctx = canvas.getContext('2d');
 
-const TILE = 32; // every tile is a 32x32 square
+const TILE = 32;    // every tile is a 32x32 square
+const HUD_H = 44;   // strip along the bottom for the health bar
 
 // ---------------------------------------------------------------
-// The room
-// '#' is a wall, '.' is walkable floor.
-// 20 tiles across, 15 tiles down = 640x480 pixels.
+// The dungeon
+// '#' wall, '.' floor, 'E' the exit you're trying to reach.
+// Every floor tile connects, so the exit is always reachable.
 // ---------------------------------------------------------------
 const MAP = [
-  '####################',
-  '#..................#',
-  '#..................#',
-  '#....####....####..#',
-  '#.......#.......#..#',
-  '#.......#.......#..#',
-  '#.......#..........#',
-  '#..........#####...#',
-  '#..............#...#',
-  '#....#####.....#...#',
-  '#........#.........#',
-  '#........#.........#',
-  '#..................#',
-  '#..................#',
-  '####################',
+  '#########################',
+  '#.........#.....#.......#',
+  '#.#######.#.#.#.#.###.#.#',
+  '#.......#.#...#.#...#.#.#',
+  '#.###.#.#.#.###.###.#.#.#',
+  '#.#.#.#...#.#.....#.#.#.E',
+  '#.#.#.#.###.#.###.#.#.###',
+  '#.#.#...#.#...#...#.#...#',
+  '#.#.#####.#.#.#.###.###.#',
+  '#...#.......#.#...#...#.#',
+  '###.#####.###.###.#####.#',
+  '#.#.....#.#.....#...#...#',
+  '#.#####.#.#.###.###.#.###',
+  '#.#.....#...#...#...#...#',
+  '#.#.#####.###.###.#####.#',
+  '#...#...#.#.....#.#...#.#',
+  '#.###.#.#.#.#.#.#.#.#.#.#',
+  '#.....#...#...#.....#...#',
+  '#########################',
 ];
 
 const COLS = MAP[0].length;
 const ROWS = MAP.length;
 
-// Is the tile at this column/row a wall?
-// Anything outside the map counts as a wall, so the player can never escape.
-function isWall(col, row) {
-  if (col < 0 || row < 0 || col >= COLS || row >= ROWS) return true;
-  return MAP[row][col] === '#';
+canvas.width  = COLS * TILE;
+canvas.height = ROWS * TILE + HUD_H;
+
+const START_COL = 1, START_ROW = 1;
+const ENEMY_SPAWNS = [[17, 2], [21, 12], [16, 17]];
+
+function tileAt(col, row) {
+  if (col < 0 || row < 0 || col >= COLS || row >= ROWS) return '#';
+  return MAP[row][col];
+}
+function isWall(col, row) { return tileAt(col, row) === '#'; }
+function isExit(col, row) { return tileAt(col, row) === 'E'; }
+
+// ---------------------------------------------------------------
+// Player and enemies
+// ---------------------------------------------------------------
+const MAX_HEALTH = 4;      // four hits and you're done
+const INVULN_TIME = 1.2;   // seconds of mercy after taking a hit
+
+const player = {
+  x: 0, y: 0,
+  size: 20,
+  speed: 160,      // pixels per second
+  health: MAX_HEALTH,
+  invuln: 0,
+};
+
+let enemies = [];
+let gameState = 'playing';   // 'playing' | 'won' | 'dead'
+
+// Drop an entity neatly into the middle of a tile
+function placeOnTile(entity, col, row) {
+  entity.x = col * TILE + (TILE - entity.size) / 2;
+  entity.y = row * TILE + (TILE - entity.size) / 2;
+}
+
+function resetGame() {
+  placeOnTile(player, START_COL, START_ROW);
+  player.health = MAX_HEALTH;
+  player.invuln = 0;
+
+  enemies = ENEMY_SPAWNS.map(([col, row]) => {
+    const e = { x: 0, y: 0, size: 20, speed: 70 };  // slower than you, on purpose
+    placeOnTile(e, col, row);
+    return e;
+  });
+
+  flowField = null;
+  repathTimer = 0;
+  gameState = 'playing';
 }
 
 // ---------------------------------------------------------------
-// The player
-// x and y are the top-left corner of the player's box, in pixels.
-// ---------------------------------------------------------------
-const player = {
-  x: TILE * 1.25,
-  y: TILE * 1.25,
-  size: 20,
-  speed: 160, // pixels per second
-};
-
-// ---------------------------------------------------------------
 // Keyboard input
-// We just record which keys are currently held down.
 // ---------------------------------------------------------------
 const keys = {};
 
 window.addEventListener('keydown', (e) => {
-  // Stop the arrow keys from scrolling the page
-  if (e.key.startsWith('Arrow')) e.preventDefault();
+  if (e.key.startsWith('Arrow')) e.preventDefault();  // stop the page scrolling
   keys[e.key.toLowerCase()] = true;
+  if (e.key.toLowerCase() === 'r' && gameState !== 'playing') resetGame();
 });
 
 window.addEventListener('keyup', (e) => {
@@ -100,68 +137,241 @@ window.addEventListener('keyup', (e) => {
 // ---------------------------------------------------------------
 // Movement + wall collision
 //
-// The trick: move along one axis at a time. If we end up inside a
-// wall, push back out of it. Doing X and Y separately is what lets
-// you slide along a wall instead of getting stuck on it.
+// Move one axis at a time. If we end up inside a wall, push back
+// out of it. Doing X and Y separately is what lets you slide along
+// a wall instead of catching on it.
 // ---------------------------------------------------------------
-function moveAndCollide(dx, dy) {
-  player.x += dx;
-  player.y += dy;
+function moveEntity(entity, dx, dy) {
+  entity.x += dx;
+  entity.y += dy;
 
-  // Which tiles is the player's box touching right now?
-  const left   = Math.floor(player.x / TILE);
-  const right  = Math.floor((player.x + player.size - 1) / TILE);
-  const top    = Math.floor(player.y / TILE);
-  const bottom = Math.floor((player.y + player.size - 1) / TILE);
+  const left   = Math.floor(entity.x / TILE);
+  const right  = Math.floor((entity.x + entity.size - 1) / TILE);
+  const top    = Math.floor(entity.y / TILE);
+  const bottom = Math.floor((entity.y + entity.size - 1) / TILE);
 
   for (let row = top; row <= bottom; row++) {
     for (let col = left; col <= right; col++) {
       if (!isWall(col, row)) continue;
-
-      // We're overlapping a wall. Snap to its edge.
-      if (dx > 0)      player.x = col * TILE - player.size;
-      else if (dx < 0) player.x = (col + 1) * TILE;
-      else if (dy > 0) player.y = row * TILE - player.size;
-      else if (dy < 0) player.y = (row + 1) * TILE;
+      if (dx > 0)      entity.x = col * TILE - entity.size;
+      else if (dx < 0) entity.x = (col + 1) * TILE;
+      else if (dy > 0) entity.y = row * TILE - entity.size;
+      else if (dy < 0) entity.y = (row + 1) * TILE;
     }
   }
 }
 
-function update(dt) {
-  let dx = 0;
-  let dy = 0;
+// Which tile is the middle of this thing standing on?
+function tileOf(entity) {
+  return {
+    col: Math.floor((entity.x + entity.size / 2) / TILE),
+    row: Math.floor((entity.y + entity.size / 2) / TILE),
+  };
+}
 
+function overlaps(a, b) {
+  return a.x < b.x + b.size && a.x + a.size > b.x &&
+         a.y < b.y + b.size && a.y + a.size > b.y;
+}
+
+// ---------------------------------------------------------------
+// Enemy pathfinding
+//
+// Once every fraction of a second we flood outward from the player,
+// tile by tile, recording for each tile which neighbour is one step
+// closer. That map is the "flow field". Every enemy then just walks
+// downhill along it, so they chase you through the maze properly
+// instead of grinding into a wall between you and them.
+//
+// One flood serves all the enemies, so adding more is nearly free.
+// ---------------------------------------------------------------
+const DIRECTIONS = [[1, 0], [-1, 0], [0, 1], [0, -1]];
+const REPATH_INTERVAL = 0.25;   // seconds between recalculations
+
+let flowField = null;
+let repathTimer = 0;
+
+function buildFlowField(startCol, startRow) {
+  const next = new Int32Array(COLS * ROWS).fill(-1);
+  const seen = new Uint8Array(COLS * ROWS);
+
+  const start = startRow * COLS + startCol;
+  const queue = [start];
+  seen[start] = 1;
+
+  for (let head = 0; head < queue.length; head++) {
+    const here = queue[head];
+    const col = here % COLS;
+    const row = (here / COLS) | 0;
+
+    for (const [dc, dr] of DIRECTIONS) {
+      const nc = col + dc, nr = row + dr;
+      if (isWall(nc, nr)) continue;
+      const there = nr * COLS + nc;
+      if (seen[there]) continue;
+      seen[there] = 1;
+      next[there] = here;    // from 'there', stepping to 'here' gets you closer
+      queue.push(there);
+    }
+  }
+  return next;
+}
+
+function updateEnemy(enemy, dt) {
+  const { col, row } = tileOf(enemy);
+  const step = flowField ? flowField[row * COLS + col] : -1;
+
+  let targetX, targetY;
+  if (step === -1) {
+    // Same tile as the player (or nowhere to go) — just head straight at them
+    targetX = player.x;
+    targetY = player.y;
+  } else {
+    const tc = step % COLS;
+    const tr = (step / COLS) | 0;
+    targetX = tc * TILE + (TILE - enemy.size) / 2;
+    targetY = tr * TILE + (TILE - enemy.size) / 2;
+  }
+
+  const dx = targetX - enemy.x;
+  const dy = targetY - enemy.y;
+  const length = Math.hypot(dx, dy);
+  if (length < 0.5) return;
+
+  const distance = Math.min(enemy.speed * dt, length);
+  moveEntity(enemy, (dx / length) * distance, 0);
+  moveEntity(enemy, 0, (dy / length) * distance);
+}
+
+// ---------------------------------------------------------------
+// One step of the game
+// ---------------------------------------------------------------
+function update(dt) {
+  if (gameState !== 'playing') return;
+
+  // --- move the player ---
+  let dx = 0, dy = 0;
   if (keys['arrowleft']  || keys['a']) dx -= 1;
   if (keys['arrowright'] || keys['d']) dx += 1;
   if (keys['arrowup']    || keys['w']) dy -= 1;
   if (keys['arrowdown']  || keys['s']) dy += 1;
 
   // Without this, moving diagonally would be about 40% faster
-  if (dx !== 0 && dy !== 0) {
-    dx *= 0.7071;
-    dy *= 0.7071;
-  }
+  if (dx !== 0 && dy !== 0) { dx *= 0.7071; dy *= 0.7071; }
 
   const distance = player.speed * dt;
-  if (dx !== 0) moveAndCollide(dx * distance, 0);
-  if (dy !== 0) moveAndCollide(0, dy * distance);
+  if (dx !== 0) moveEntity(player, dx * distance, 0);
+  if (dy !== 0) moveEntity(player, 0, dy * distance);
+
+  // --- did we escape? ---
+  const here = tileOf(player);
+  if (isExit(here.col, here.row)) {
+    gameState = 'won';
+    return;
+  }
+
+  // --- move the enemies ---
+  repathTimer -= dt;
+  if (repathTimer <= 0) {
+    flowField = buildFlowField(here.col, here.row);
+    repathTimer = REPATH_INTERVAL;
+  }
+  for (const enemy of enemies) updateEnemy(enemy, dt);
+
+  // --- getting hit ---
+  if (player.invuln > 0) player.invuln -= dt;
+
+  if (player.invuln <= 0) {
+    for (const enemy of enemies) {
+      if (!overlaps(player, enemy)) continue;
+      player.health -= 1;
+      player.invuln = INVULN_TIME;
+      if (player.health <= 0) {
+        player.health = 0;
+        gameState = 'dead';
+      }
+      break;   // only one hit per contact, however many enemies pile on
+    }
+  }
 }
 
 // ---------------------------------------------------------------
 // Drawing
 // ---------------------------------------------------------------
+function drawHUD() {
+  const top = ROWS * TILE;
+  ctx.fillStyle = '#0e1013';
+  ctx.fillRect(0, top, canvas.width, HUD_H);
+
+  ctx.fillStyle = '#8b93a7';
+  ctx.font = 'bold 13px system-ui, sans-serif';
+  ctx.textBaseline = 'middle';
+  ctx.fillText('HEALTH', 14, top + HUD_H / 2);
+
+  // One block per hit you can still take
+  const blockW = 42, blockH = 16, gap = 6, startX = 82;
+  for (let i = 0; i < MAX_HEALTH; i++) {
+    const x = startX + i * (blockW + gap);
+    const y = top + (HUD_H - blockH) / 2;
+    ctx.fillStyle = i < player.health ? '#d1495b' : '#2a2f3a';
+    ctx.fillRect(x, y, blockW, blockH);
+  }
+
+  ctx.fillStyle = '#5c6478';
+  ctx.font = '12px system-ui, sans-serif';
+  ctx.textAlign = 'right';
+  ctx.fillText('Reach the green exit', canvas.width - 14, top + HUD_H / 2);
+  ctx.textAlign = 'left';
+}
+
+function drawBanner(title, subtitle, colour) {
+  ctx.fillStyle = 'rgba(10, 12, 16, 0.82)';
+  ctx.fillRect(0, 0, canvas.width, ROWS * TILE);
+
+  ctx.textAlign = 'center';
+  ctx.fillStyle = colour;
+  ctx.font = 'bold 44px system-ui, sans-serif';
+  ctx.fillText(title, canvas.width / 2, ROWS * TILE / 2 - 16);
+
+  ctx.fillStyle = '#c8cede';
+  ctx.font = '17px system-ui, sans-serif';
+  ctx.fillText(subtitle, canvas.width / 2, ROWS * TILE / 2 + 26);
+  ctx.textAlign = 'left';
+}
+
 function draw() {
-  // The room
+  // The dungeon
   for (let row = 0; row < ROWS; row++) {
     for (let col = 0; col < COLS; col++) {
-      ctx.fillStyle = isWall(col, row) ? '#3a4152' : '#21262e';
+      if (isWall(col, row))      ctx.fillStyle = '#3a4152';
+      else if (isExit(col, row)) ctx.fillStyle = '#4caf50';
+      else                       ctx.fillStyle = '#21262e';
       ctx.fillRect(col * TILE, row * TILE, TILE, TILE);
+
+      if (isExit(col, row)) {
+        ctx.fillStyle = '#a5f0a8';
+        ctx.fillRect(col * TILE + 10, row * TILE + 10, TILE - 20, TILE - 20);
+      }
     }
   }
 
-  // The player
-  ctx.fillStyle = '#e0c068';
-  ctx.fillRect(player.x, player.y, player.size, player.size);
+  // Enemies
+  ctx.fillStyle = '#d1495b';
+  for (const enemy of enemies) {
+    ctx.fillRect(enemy.x, enemy.y, enemy.size, enemy.size);
+  }
+
+  // Player. While invulnerable we blink, so a hit is obvious.
+  const blinking = player.invuln > 0 && Math.floor(player.invuln * 10) % 2 === 0;
+  if (!blinking) {
+    ctx.fillStyle = '#e0c068';
+    ctx.fillRect(player.x, player.y, player.size, player.size);
+  }
+
+  drawHUD();
+
+  if (gameState === 'won')  drawBanner('YOU ESCAPED', 'Press R to play again', '#7ee081');
+  if (gameState === 'dead') drawBanner('YOU DIED',    'Press R to try again',  '#d1495b');
 }
 
 // ---------------------------------------------------------------
@@ -170,17 +380,14 @@ function draw() {
 let lastTime = performance.now();
 
 function frame(now) {
-  // dt = seconds since the last frame. Capped so that switching
-  // tabs doesn't teleport the player across the room.
   const dt = Math.min((now - lastTime) / 1000, 0.05);
   lastTime = now;
-
   update(dt);
   draw();
-
   requestAnimationFrame(frame);
 }
 
+resetGame();
 requestAnimationFrame(frame);
 </script>
 
