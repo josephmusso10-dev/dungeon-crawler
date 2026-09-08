@@ -54,35 +54,36 @@ canvas.height = VIEW_H + HUD_H;
 // x = 1.5 means "in the middle of column 1".
 // ---------------------------------------------------------------
 const MAP = [
-  '#####E#######################',
-  '#.....#...#.................#',
-  '#.#.#.#.#.#######.##.....##.#',
-  '#...#...#.#.....#...........#',
-  '#########.#.###.###......##.#',
-  '#...#.....#...#...#.......#.#',
-  '#.#.#.#####.#.#.#.##......###',
-  '#.#.#...#...#.#.#...#...#...#',
-  '#.#.###.#.###.#.###.#.#.###.#',
-  '#.#...#.#...#.#.......#.....#',
-  '#.###.#.###.#.#############.#',
-  '#...#.#.#...#.........#...#.#',
-  '#.#.###.#.###########.#.###.#',
-  '#.#.....#.........#...#.....#',
-  '#.#.....#########.#.....#####',
-  '#...............#.#.........#',
-  '#.#.....#######.#.#.....###.#',
-  '#.#.............#.#.....#...#',
-  '#.#.###.###.#######.....#.#.#',
-  '#.....#.............#.....#.#',
-  '#############################',
+  '#################################',
+  '#############........##........##',
+  '##.......####........##........##',
+  '##.............................##',
+  '##.......##..........##........##',
+  '###.#.#####..........############',
+  '###.#.#####..####################',
+  '###.#.#####..####################',
+  '###.#.##......#############....##',
+  '#..............................##',
+  'E..............................##',
+  '#.....##......###........####.###',
+  '#.............#######.#######.###',
+  '#.....######.########.#####....##',
+  '#.....######.#####......###....##',
+  '###.#.######.#####.............##',
+  '###.#.####.....###......###....##',
+  '###............................##',
+  '#.....####.....###......#####.###',
+  '#.............................###',
+  '#.....###########################',
+  '#################################',
 ];
 
 const COLS = MAP[0].length;
 const ROWS = MAP.length;
 
-const START_COL = 1, START_ROW = 1;
-const ENEMY_SPAWNS = [[17, 17], [12, 1], [10, 13]];
-const KEY_TILES    = [[5, 15], [22, 4], [21, 16]];
+const START_COL = 17, START_ROW = 3;
+const ENEMY_SPAWNS = [[21, 17], [29, 9], [3, 12]];
+const KEY_TILES    = [[29, 15], [3, 19], [21, 10]];
 const KEYS_NEEDED  = KEY_TILES.length;
 
 function tileAt(col, row) {
@@ -105,20 +106,20 @@ for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (isDoor(c, r)) 
 // ---------------------------------------------------------------
 const MAX_HEALTH  = 4;
 const INVULN_TIME = 1.2;
-let MOVE_SPEED    = 3.0;    // tiles per second
 let TURN_SPEED    = 2.6;    // radians per second
 
 // Every key you take wakes the dungeon up another notch. The last
 // stage is deliberately faster than you are -- once they see you at
 // that point you cannot outrun them, you have to break line of sight.
 const ENEMY_TIERS = [
-  { speed: 1.4, damage: 1, sight:  5, label: 'PROWLING', colour: [150, 62, 74] },
-  { speed: 2.0, damage: 1, sight:  7, label: 'HUNTING',  colour: [196, 62, 78] },
-  { speed: 2.6, damage: 2, sight:  9, label: 'ENRAGED',  colour: [232, 66, 66] },
-  { speed: 3.3, damage: 3, sight: 10, label: 'FRENZIED', colour: [255, 96, 60] },
+  { speed: 1.4, you: 3.0, damage: 1, sight:  5, label: 'PROWLING', colour: [138, 74, 62] },
+  { speed: 2.2, you: 3.3, damage: 1, sight:  7, label: 'HUNTING',  colour: [176, 74, 66] },
+  { speed: 3.0, you: 3.6, damage: 2, sight:  9, label: 'ENRAGED',  colour: [214, 72, 62] },
+  { speed: 4.2, you: 3.9, damage: 3, sight: 10, label: 'FRENZIED', colour: [255, 104, 56] },
 ];
 function tier() { return ENEMY_TIERS[Math.min(player.keys, ENEMY_TIERS.length - 1)]; }
 let ALERT_MEMORY  = 2.0;    // seconds it keeps hunting after losing sight of you
+let KEY_RECOIL    = 1.6;    // seconds they stagger when the dungeon escalates
 const RADIUS      = 0.22;   // how fat you are, for bumping into walls
 
 const player = { x: 0, y: 0, angle: 0, health: MAX_HEALTH, invuln: 0, keys: 0 };
@@ -141,6 +142,7 @@ function resetGame() {
   enemies = ENEMY_SPAWNS.map(([c, r]) => ({
     x: c + 0.5, y: r + 0.5,
     alert: 0,          // seconds left of actively hunting you
+    stun: 0,           // seconds left staggering after a key is taken
     wanderX: c + 0.5,  // where it is ambling to while it has not seen you
     wanderY: r + 0.5,
   }));
@@ -250,6 +252,9 @@ function pickWanderSpot(enemy) {
 }
 
 function updateEnemy(enemy, dt) {
+  // Still reeling from the last key: it cannot move or look for you
+  if (enemy.stun > 0) { enemy.stun -= dt; return; }
+
   // Spot you, and remember you for a few seconds after you break away
   if (canSee(enemy.x, enemy.y, player.x, player.y)) enemy.alert = ALERT_MEMORY;
   else if (enemy.alert > 0) enemy.alert -= dt;
@@ -299,7 +304,7 @@ function update(dt) {
   if (held['arrowup']   || held['w']) walk += 1;
   if (held['arrowdown'] || held['s']) walk -= 1;
   if (walk !== 0) {
-    const step = walk * MOVE_SPEED * dt;
+    const step = walk * tier().you * dt;
     moveBody(player, Math.cos(player.angle) * step, Math.sin(player.angle) * step);
   }
 
@@ -309,9 +314,13 @@ function update(dt) {
     if (Math.hypot(k.x - player.x, k.y - player.y) < 0.5) {
       k.taken = true;
       player.keys += 1;
+      // Everything in here gets faster the moment you take a key. Without
+      // this stagger, anything already near you at that instant simply
+      // kills you, because the new speed is quicker than you can run.
+      for (const e of enemies) { e.stun = KEY_RECOIL; e.alert = 0; }
       message = player.keys < KEYS_NEEDED
-        ? 'Key ' + player.keys + '/' + KEYS_NEEDED + '  -  they are ' + tier().label + ' now'
-        : 'Last key. They are FRENZIED. Get to the door.';
+        ? 'Key ' + player.keys + '/' + KEYS_NEEDED + '  -  they stagger, then come back ' + tier().label
+        : 'Last key. They are FRENZIED. RUN for the door.';
       messageTimer = 3;
     }
   }
@@ -404,7 +413,7 @@ function castWalls() {
       if (player.keys >= KEYS_NEEDED) ctx.fillStyle = shade(76, 200, 90, f);
       else                            ctx.fillStyle = shade(190, 60, 70, f);
     } else {
-      ctx.fillStyle = shade(92, 102, 128, f);
+      ctx.fillStyle = shade(128, 114, 96, f);
     }
     ctx.fillRect(x, top, 1, height);
   }
@@ -438,19 +447,117 @@ function drawSprite(wx, wy, r, g, b, scale, drop) {
   }
 }
 
+// ---------------------------------------------------------------
+// What the dungeon's inhabitants look like.
+//
+// Drawn from this little picture rather than as a flat block. Each
+// letter is a colour: o skin, E eye, n neck, t tunic, a arm,
+// l leg, b boot. A dot means "see through here".
+//
+// To draw one we squash this picture onto the screen at whatever
+// size its distance calls for -- the same way the wall strips work.
+// ---------------------------------------------------------------
+const PERSON = [
+  '....ooo....',
+  '...ooooo...',
+  '...oEoEo...',
+  '...ooooo...',
+  '....nnn....',
+  '..ttttttt..',
+  '.attttttta.',
+  '.attttttta.',
+  '.attttttta.',
+  '..ttttttt..',
+  '..ttt.ttt..',
+  '..ll...ll..',
+  '..ll...ll..',
+  '..ll...ll..',
+  '..bb...bb..',
+  '..bb...bb..',
+];
+const PERSON_W = PERSON[0].length;
+const PERSON_H = PERSON.length;
+
+// Squeeze each column of that picture into runs of the same colour,
+// once, at startup. Drawing then costs a handful of rectangles per
+// screen column instead of one per pixel.
+const PERSON_RUNS = (() => {
+  const cols = [];
+  for (let x = 0; x < PERSON_W; x++) {
+    const runs = [];
+    let y = 0;
+    while (y < PERSON_H) {
+      const ch = PERSON[y][x];
+      let end = y;
+      while (end + 1 < PERSON_H && PERSON[end + 1][x] === ch) end++;
+      if (ch !== '.') runs.push({ from: y, to: end + 1, ch });
+      y = end + 1;
+    }
+    cols.push(runs);
+  }
+  return cols;
+})();
+
+function personColour(ch, tint, f, awake) {
+  const dim = awake ? 1 : 0.55;      // asleep to your presence = duller
+  switch (ch) {
+    case 'o': return shade(214, 178, 140, f * dim);
+    case 'E': return shade(26, 18, 22, f * dim);
+    case 'n': return shade(178, 144, 112, f * dim);
+    case 't': return shade(tint[0], tint[1], tint[2], f * dim);
+    case 'a': return shade(tint[0] * 0.72, tint[1] * 0.72, tint[2] * 0.72, f * dim);
+    case 'l': return shade(62, 52, 58, f * dim);
+    default:  return shade(36, 30, 34, f * dim);
+  }
+}
+
+// Draw one of them standing in the world, hidden wherever a wall is
+// in front. Same projection maths as drawSprite, but instead of one
+// solid rectangle we paint the little picture above.
+function drawPerson(wx, wy, tint, awake) {
+  const dirX = Math.cos(player.angle), dirY = Math.sin(player.angle);
+  const planeX = -dirY * 0.66, planeY = dirX * 0.66;
+
+  const sx = wx - player.x, sy = wy - player.y;
+  const invDet = 1 / (planeX * dirY - dirX * planeY);
+  const tx = invDet * (dirY * sx - dirX * sy);
+  const ty = invDet * (-planeY * sx + planeX * sy);
+  if (ty <= 0.15) return;
+
+  const screenX = (VIEW_W / 2) * (1 + tx / ty);
+  const height = Math.min(VIEW_H * 3, (VIEW_H / ty) * 0.82);
+  const width = height * (PERSON_W / PERSON_H);
+  const left = screenX - width / 2;
+  const top = VIEW_H / 2 + (VIEW_H / ty) * 0.09 - height;   // feet on the floor line
+
+  const f = fog(ty);
+  const from = Math.max(0, Math.floor(left));
+  const to = Math.min(VIEW_W, Math.ceil(left + width));
+
+  for (let x = from; x < to; x++) {
+    if (ty >= zBuffer[x]) continue;          // a wall is nearer than they are
+    let col = Math.floor(((x - left) / width) * PERSON_W);
+    if (col < 0) col = 0; else if (col >= PERSON_W) col = PERSON_W - 1;
+    for (const run of PERSON_RUNS[col]) {
+      const y0 = top + (run.from / PERSON_H) * height;
+      const y1 = top + (run.to / PERSON_H) * height;
+      ctx.fillStyle = personColour(run.ch, tint, f, awake);
+      ctx.fillRect(x, y0, 1, Math.max(1, y1 - y0));
+    }
+  }
+}
+
 function drawSprites() {
   // Furthest first, so nearer things paint over them
   const list = [];
   for (const k of keys3d) if (!k.taken) list.push({ x: k.x, y: k.y, kind: 'key' });
-  for (const e of enemies) list.push({ x: e.x, y: e.y, kind: 'enemy', alert: e.alert > 0 });
+  for (const e of enemies) list.push({ x: e.x, y: e.y, kind: 'enemy', alert: e.alert > 0, stunned: e.stun > 0 });
   list.sort((a, b) =>
     Math.hypot(b.x - player.x, b.y - player.y) - Math.hypot(a.x - player.x, a.y - player.y));
 
   for (const s of list) {
     if (s.kind === 'key') { drawSprite(s.x, s.y, 224, 192, 104, 0.28, 0.18); continue; }
-    const [er, eg, eb] = tier().colour;
-    if (s.alert) drawSprite(s.x, s.y, er, eg, eb, 0.62, 0.0);                       // hunting you
-    else         drawSprite(s.x, s.y, er * 0.5, eg * 0.5, eb * 0.5, 0.62, 0.0);     // has not seen you
+    drawPerson(s.x, s.y, s.stunned ? [120, 120, 132] : tier().colour, s.alert && !s.stunned);
   }
 }
 
@@ -465,8 +572,8 @@ function drawMinimap() {
 
   for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
     if (isDoor(c, r))      ctx.fillStyle = player.keys >= KEYS_NEEDED ? '#4caf50' : '#bd3c46';
-    else if (isWall(c, r)) ctx.fillStyle = '#39404f';
-    else                   ctx.fillStyle = '#191d24';
+    else if (isWall(c, r)) ctx.fillStyle = '#4a4239';
+    else                   ctx.fillStyle = '#1c1815';
     ctx.fillRect(ox + c * scale, oy + r * scale, scale, scale);
   }
 
@@ -541,9 +648,9 @@ function drawBanner(title, subtitle, colour) {
 
 function draw() {
   // Ceiling and floor
-  ctx.fillStyle = '#171b21';
+  ctx.fillStyle = '#131010';
   ctx.fillRect(0, 0, VIEW_W, VIEW_H / 2);
-  ctx.fillStyle = '#23272f';
+  ctx.fillStyle = '#2b2320';
   ctx.fillRect(0, VIEW_H / 2, VIEW_W, VIEW_H / 2);
 
   castWalls();
