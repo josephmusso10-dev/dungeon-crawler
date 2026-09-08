@@ -83,7 +83,17 @@ const ROWS = MAP.length;
 
 const START_COL = 17, START_ROW = 3;
 const ENEMY_SPAWNS = [[21, 17], [29, 9], [3, 12]];
-const KEY_TILES    = [[29, 15], [3, 19], [21, 10]];
+// The three keys, in the order you must collect them. Each one lives in
+// a named part of the dungeon; the objective tracker tells you which is
+// next and roughly which way it lies. Nothing is marked on the map.
+// Ordered so most of the journey happens while they are still slow, and
+// the run to the door at the end is short. Legs: 34, 13, 27, 11 steps.
+const KEYS = [
+  { tile: [29, 15], name: 'Bone Key',  place: 'the Cistern'   },
+  { tile: [21, 10], name: 'Iron Key',  place: 'the Guardroom' },
+  { tile: [ 3, 19], name: 'Ember Key', place: 'the Crypt'     },
+];
+const KEY_TILES = KEYS.map(k => k.tile);
 const KEYS_NEEDED  = KEY_TILES.length;
 
 function tileAt(col, row) {
@@ -146,7 +156,7 @@ function resetGame() {
     wanderX: c + 0.5,  // where it is ambling to while it has not seen you
     wanderY: r + 0.5,
   }));
-  keys3d  = KEY_TILES.map(([c, r]) => ({ x: c + 0.5, y: r + 0.5, taken: false }));
+  keys3d  = KEYS.map((k) => ({ x: k.tile[0] + 0.5, y: k.tile[1] + 0.5, taken: false }));
 
   flowField = null;
   repathTimer = 0;
@@ -308,9 +318,11 @@ function update(dt) {
     moveBody(player, Math.cos(player.angle) * step, Math.sin(player.angle) * step);
   }
 
-  // --- picking up keys ---
-  for (const k of keys3d) {
-    if (k.taken) continue;
+  // --- picking up the key you are currently after ---
+  // Only the active one counts, so the order is fixed.
+  const active = keys3d[player.keys];
+  if (active && !active.taken) {
+    const k = active;
     if (Math.hypot(k.x - player.x, k.y - player.y) < 0.5) {
       k.taken = true;
       player.keys += 1;
@@ -319,8 +331,8 @@ function update(dt) {
       // kills you, because the new speed is quicker than you can run.
       for (const e of enemies) { e.stun = KEY_RECOIL; e.alert = 0; }
       message = player.keys < KEYS_NEEDED
-        ? 'Key ' + player.keys + '/' + KEYS_NEEDED + '  -  they stagger, then come back ' + tier().label
-        : 'Last key. They are FRENZIED. RUN for the door.';
+        ? KEYS[player.keys - 1].name + ' taken  -  they stagger, then come back ' + tier().label
+        : KEYS[KEYS_NEEDED - 1].name + ' taken. They are FRENZIED. RUN for the door.';
       messageTimer = 3;
     }
   }
@@ -329,7 +341,10 @@ function update(dt) {
   const toDoor = Math.hypot((doorCol + 0.5) - player.x, (doorRow + 0.5) - player.y);
   if (toDoor < 1.2) {
     if (player.keys >= KEYS_NEEDED) { gameState = 'won'; return; }
-    if (messageTimer <= 0) { message = 'Locked. Find all ' + KEYS_NEEDED + ' keys.'; messageTimer = 1.5; }
+    if (messageTimer <= 0) {
+      message = 'Locked. You still need the ' + KEYS[player.keys].name + '.';
+      messageTimer = 1.5;
+    }
   }
 
   // --- enemies ---
@@ -550,7 +565,8 @@ function drawPerson(wx, wy, tint, awake) {
 function drawSprites() {
   // Furthest first, so nearer things paint over them
   const list = [];
-  for (const k of keys3d) if (!k.taken) list.push({ x: k.x, y: k.y, kind: 'key' });
+  const active = keys3d[player.keys];
+  if (active && !active.taken) list.push({ x: active.x, y: active.y, kind: 'key' });
   for (const e of enemies) list.push({ x: e.x, y: e.y, kind: 'enemy', alert: e.alert > 0, stunned: e.stun > 0 });
   list.sort((a, b) =>
     Math.hypot(b.x - player.x, b.y - player.y) - Math.hypot(a.x - player.x, a.y - player.y));
@@ -577,12 +593,6 @@ function drawMinimap() {
     ctx.fillRect(ox + c * scale, oy + r * scale, scale, scale);
   }
 
-  for (const k of keys3d) {
-    if (k.taken) continue;
-    ctx.fillStyle = '#e0c068';
-    ctx.fillRect(ox + k.x * scale - 2, oy + k.y * scale - 2, 4, 4);
-  }
-
   // You, and the way you are looking
   ctx.fillStyle = '#8fd8ff';
   ctx.fillRect(ox + player.x * scale - 2, oy + player.y * scale - 2, 4, 4);
@@ -593,6 +603,50 @@ function drawMinimap() {
              oy + (player.y + Math.sin(player.angle) * 2.2) * scale);
   ctx.stroke();
   ctx.globalAlpha = 1;
+}
+
+// Which way is the thing you are looking for? Screen coordinates run
+// with +y downward, so south is positive y.
+function bearingTo(tx, ty) {
+  const dx = tx - player.x, dy = ty - player.y;
+  const names = ['east', 'south-east', 'south', 'south-west',
+                 'west', 'north-west', 'north', 'north-east'];
+  let a = Math.atan2(dy, dx);
+  if (a < 0) a += Math.PI * 2;
+  return names[Math.round(a / (Math.PI / 4)) % 8];
+}
+
+function drawObjective() {
+  const done = player.keys >= KEYS_NEEDED;
+  const target = done ? { x: doorCol + 0.5, y: doorRow + 0.5 } : keys3d[player.keys];
+  const heading = bearingTo(target.x, target.y);
+  const paces = Math.round(Math.hypot(target.x - player.x, target.y - player.y));
+
+  const title = done ? 'ESCAPE' : 'OBJECTIVE ' + (player.keys + 1) + ' of ' + KEYS_NEEDED;
+  const line  = done
+    ? 'The Iron Door  -  ' + heading + ', ' + paces + ' paces'
+    : KEYS[player.keys].name + ', in ' + KEYS[player.keys].place +
+      '  -  ' + heading + ', ' + paces + ' paces';
+
+  ctx.font = 'bold 11px system-ui, sans-serif';
+  const w = Math.max(ctx.measureText(title).width, 0) + 24;
+  ctx.font = '14px system-ui, sans-serif';
+  const w2 = ctx.measureText(line).width + 24;
+
+  ctx.globalAlpha = 0.82;
+  ctx.fillStyle = '#0b0908';
+  ctx.fillRect(12, 12, Math.max(w, w2), 46);
+  ctx.globalAlpha = 1;
+
+  ctx.textBaseline = 'top';
+  ctx.textAlign = 'left';
+  ctx.fillStyle = done ? '#7ee081' : '#9a8f7d';
+  ctx.font = 'bold 11px system-ui, sans-serif';
+  ctx.fillText(title, 24, 20);
+  ctx.fillStyle = '#e8dfd0';
+  ctx.font = '14px system-ui, sans-serif';
+  ctx.fillText(line, 24, 36);
+  ctx.textBaseline = 'middle';
 }
 
 function drawHUD() {
@@ -662,6 +716,7 @@ function draw() {
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   }
 
+  drawObjective();
   if (showMap) drawMinimap();
 
   if (message) {
