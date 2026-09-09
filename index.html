@@ -165,18 +165,6 @@ let showMap = true;
 // that as tilting your head, and it costs one number.
 let horizon = 0;
 const HORIZON_LIMIT = VIEW_H * 0.38;
-let MOUSE_YAW   = 0.0022;   // radians of turn per pixel of mouse movement
-let MOUSE_PITCH = 0.85;     // pixels of horizon shift per pixel of mouse movement
-let mouseLook = false;      // is the pointer captured right now?
-
-// One place that applies a mouse movement, so it can be tested without
-// needing a real mouse.
-function look(dx, dy) {
-  player.angle += dx * MOUSE_YAW;
-  horizon -= dy * MOUSE_PITCH;
-  if (horizon >  HORIZON_LIMIT) horizon =  HORIZON_LIMIT;
-  if (horizon < -HORIZON_LIMIT) horizon = -HORIZON_LIMIT;
-}
 
 function resetGame() {
   player.x = START_COL + 0.5;
@@ -184,6 +172,8 @@ function resetGame() {
   player.angle = 0;           // facing east, into the dungeon
   horizon = 0;
   appliedYaw = 0;
+  pitchOffset = 0;
+  clutch = false;
   player.health = MAX_HEALTH;
   player.invuln = 0;
   player.keys = 0;
@@ -225,12 +215,9 @@ window.addEventListener('keyup', (e) => { held[e.key.toLowerCase()] = false; });
 // lets you turn a full circle even though a real cursor stops dead at
 // the edge of the window. Up and down is mapped directly, so the cursor
 // height is where you are looking, and centring it levels you out.
-//
-// If the browser happens to grant a pointer lock (many refuse), we use
-// raw mouse movement instead, which is nicer still.
 let pointerInView = false;
 let pointerNX = 0, pointerNY = 0;   // -1 .. 1 across the 3D view
-let lockUnavailable = false;
+let clutch = false;                 // button held: the view ignores the cursor
 
 // The cursor is now the only way to turn, so it has to do two jobs.
 //
@@ -243,14 +230,28 @@ let lockUnavailable = false;
 // could never turn more than a few degrees, because a real cursor stops at
 // the edge of the window.
 let LOOK_YAW = 0.95;            // how far the view swings across the aim zone
-const AIM_ZONE = 0.72;          // fraction of the half-screen that is pure aiming
+let AIM_ZONE   = 0.72;          // fraction of the half-screen that is pure aiming
 let EDGE_TURN_RATE = 2.8;       // radians per second once you push past it
 let PITCH_GAIN = 1.5;           // vertical sensitivity
 
-// How much of the cursor's swing is currently folded into player.angle.
+// How much of the cursor's swing is currently folded into the view.
 // Kept separate so we can take it back out cleanly when the cursor moves
 // or leaves, which is what makes this an aim rather than a drift.
 let appliedYaw = 0;
+let pitchOffset = 0;    // where 'level' currently sits, moved by the clutch
+
+// What the cursor's height alone is asking for
+function cursorPitch() {
+  return -Math.max(-1, Math.min(1, pointerNY * PITCH_GAIN)) * HORIZON_LIMIT;
+}
+
+// Called when you let go of the button: keep the view exactly where it is,
+// but treat wherever the cursor now sits as the new neutral.
+function rebaseToCursor() {
+  const nx = Math.max(-1, Math.min(1, pointerNX));
+  appliedYaw = Math.max(-1, Math.min(1, nx / AIM_ZONE)) * LOOK_YAW;
+  pitchOffset = horizon - cursorPitch();
+}
 
 function trackPointer(e) {
   const rect = canvas.getBoundingClientRect();
@@ -271,7 +272,9 @@ canvas.addEventListener('mouseleave', () => { pointerInView = false; });
 // straight ahead; move it and the view swings to match; bring it back
 // and the view comes back with it. Nothing drifts on its own.
 function lookWithCursor(dt) {
-  if (mouseLook || !pointerInView) {
+  if (clutch) return;                // button held: the view stays put
+
+  if (!pointerInView) {
     player.angle -= appliedYaw;      // hand the swing back
     appliedYaw = 0;
     return;
@@ -289,22 +292,22 @@ function lookWithCursor(dt) {
     player.angle += Math.sign(nx) * (past / (1 - AIM_ZONE)) * EDGE_TURN_RATE * dt;
   }
 
-  horizon = -Math.max(-1, Math.min(1, pointerNY * PITCH_GAIN)) * HORIZON_LIMIT;
+  horizon = Math.max(-HORIZON_LIMIT, Math.min(HORIZON_LIMIT, pitchOffset + cursorPitch()));
 }
 
-// A click still tries for a pointer lock. If the browser refuses, we
-// notice once and stop asking.
-canvas.addEventListener('click', () => {
-  if (mouseLook || lockUnavailable || !canvas.requestPointerLock) return;
-  const p = canvas.requestPointerLock();
-  if (p && p.catch) p.catch(() => { lockUnavailable = true; });
+// Hold the button to unhook the view from the cursor. Move the cursor
+// wherever you like, let go, and the view carries on from where it was.
+// It is the same thing as lifting a mouse off the desk and putting it
+// back in the middle, and it is why the cursor never runs out of room.
+canvas.addEventListener('mousedown', (e) => {
+  if (e.button !== 0) return;
+  e.preventDefault();
+  clutch = true;
 });
-document.addEventListener('pointerlockchange', () => {
-  mouseLook = (document.pointerLockElement === canvas);
-});
-document.addEventListener('pointerlockerror', () => { lockUnavailable = true; });
-document.addEventListener('mousemove', (e) => {
-  if (mouseLook) look(e.movementX || 0, e.movementY || 0);
+window.addEventListener('mouseup', (e) => {
+  if (e.button !== 0 || !clutch) return;
+  clutch = false;
+  rebaseToCursor();     // adopt the cursor's new spot without the view jumping
 });
 
 // ---------------------------------------------------------------
@@ -977,7 +980,7 @@ function drawHUD() {
   ctx.textAlign = 'right';
   ctx.font = '12px system-ui, sans-serif';
   ctx.fillStyle = '#5c6478';
-  ctx.fillText('W/S forward   A/D sidestep   cursor steers   M map', VIEW_W - 14, top + HUD_H / 2);
+  ctx.fillText('W/S forward   A/D sidestep   cursor steers   hold click to reposition   M map', VIEW_W - 14, top + HUD_H / 2);
   ctx.textAlign = 'left';
 }
 
@@ -1012,7 +1015,7 @@ function draw() {
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   }
 
-  if (gameState === 'playing' && !mouseLook && !pointerInView) {
+  if (gameState === 'playing' && !pointerInView) {
     ctx.textAlign = 'center';
     ctx.font = '13px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(232, 223, 208, 0.5)';
