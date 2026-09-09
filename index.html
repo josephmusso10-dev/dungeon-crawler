@@ -136,7 +136,6 @@ for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (isDoor(c, r)) 
 // ---------------------------------------------------------------
 const MAX_HEALTH  = 4;
 const INVULN_TIME = 1.2;
-let TURN_SPEED    = 2.6;    // radians per second
 
 // Every key you take wakes the dungeon up another notch. The last
 // stage is deliberately faster than you are -- once they see you at
@@ -233,11 +232,20 @@ let pointerInView = false;
 let pointerNX = 0, pointerNY = 0;   // -1 .. 1 across the 3D view
 let lockUnavailable = false;
 
-// How far the view swings when the cursor is at the edge. Half the field
-// of view means whatever sits under the cursor swings to the middle, so
-// the view lines up with what you are pointing at. Widen this if you
-// want a bigger sweep without touching A/D.
-let LOOK_YAW = Math.atan(0.66);
+// The cursor is now the only way to turn, so it has to do two jobs.
+//
+// Across the middle of the screen it AIMS: the view swings to match where
+// the cursor sits, holds still when the cursor holds still, and comes back
+// when the cursor comes back. That is the part that should feel precise.
+//
+// Push past the aim zone into the outer edges and it also STEERS, swinging
+// you round for as long as you keep the cursor out there. Without that you
+// could never turn more than a few degrees, because a real cursor stops at
+// the edge of the window.
+let LOOK_YAW = 0.95;            // how far the view swings across the aim zone
+const AIM_ZONE = 0.72;          // fraction of the half-screen that is pure aiming
+let EDGE_TURN_RATE = 2.8;       // radians per second once you push past it
+let PITCH_GAIN = 1.5;           // vertical sensitivity
 
 // How much of the cursor's swing is currently folded into player.angle.
 // Kept separate so we can take it back out cleanly when the cursor moves
@@ -262,16 +270,26 @@ canvas.addEventListener('mouseleave', () => { pointerInView = false; });
 // The view points where the cursor points. Cursor in the middle means
 // straight ahead; move it and the view swings to match; bring it back
 // and the view comes back with it. Nothing drifts on its own.
-function lookWithCursor() {
+function lookWithCursor(dt) {
   if (mouseLook || !pointerInView) {
     player.angle -= appliedYaw;      // hand the swing back
     appliedYaw = 0;
     return;
   }
-  const want = Math.max(-1, Math.min(1, pointerNX)) * LOOK_YAW;
-  player.angle += want - appliedYaw; // only ever apply the difference
-  appliedYaw = want;
-  horizon = -Math.max(-1, Math.min(1, pointerNY)) * HORIZON_LIMIT;
+  const nx = Math.max(-1, Math.min(1, pointerNX));
+
+  // aiming: absolute, so nothing drifts while the cursor is still
+  const aim = Math.max(-1, Math.min(1, nx / AIM_ZONE)) * LOOK_YAW;
+  player.angle += aim - appliedYaw;  // only ever apply the difference
+  appliedYaw = aim;
+
+  // steering: only out at the edges, and only while you hold it there
+  const past = Math.abs(nx) - AIM_ZONE;
+  if (past > 0) {
+    player.angle += Math.sign(nx) * (past / (1 - AIM_ZONE)) * EDGE_TURN_RATE * dt;
+  }
+
+  horizon = -Math.max(-1, Math.min(1, pointerNY * PITCH_GAIN)) * HORIZON_LIMIT;
 }
 
 // A click still tries for a pointer lock. If the browser refuses, we
@@ -414,21 +432,28 @@ function update(dt) {
   if (messageTimer > 0) { messageTimer -= dt; if (messageTimer <= 0) message = ''; }
   if (gameState !== 'playing') return;
 
-  lookWithCursor();
+  lookWithCursor(dt);
+  // --- walking and stepping sideways ---
+  // W/S go the way you are facing. A/D step left and right without
+  // changing which way you face -- the cursor does all the turning.
+  let forward = 0, sideways = 0;
+  if (held['w'] || held['arrowup'])    forward  += 1;
+  if (held['s'] || held['arrowdown'])  forward  -= 1;
+  if (held['d'] || held['arrowright']) sideways += 1;
+  if (held['a'] || held['arrowleft'])  sideways -= 1;
 
-  // --- turning with the keyboard ---
-  let turn = 0;
-  if (held['arrowleft']  || held['a']) turn -= 1;
-  if (held['arrowright'] || held['d']) turn += 1;
-  player.angle += turn * TURN_SPEED * dt;
+  if (forward !== 0 || sideways !== 0) {
+    // going forwards and sideways at once should not be faster
+    const len = Math.hypot(forward, sideways);
+    forward /= len; sideways /= len;
 
-  // --- walking ---
-  let walk = 0;
-  if (held['arrowup']   || held['w']) walk += 1;
-  if (held['arrowdown'] || held['s']) walk -= 1;
-  if (walk !== 0) {
-    const step = walk * tier().you * dt;
-    moveBody(player, Math.cos(player.angle) * step, Math.sin(player.angle) * step);
+    const facingX = Math.cos(player.angle), facingY = Math.sin(player.angle);
+    const rightX = -facingY, rightY = facingX;   // your right hand, 90 degrees round
+
+    const step = tier().you * dt;
+    moveBody(player,
+      (facingX * forward + rightX * sideways) * step,
+      (facingY * forward + rightY * sideways) * step);
   }
 
   // --- picking up the key you are currently after ---
@@ -952,7 +977,7 @@ function drawHUD() {
   ctx.textAlign = 'right';
   ctx.font = '12px system-ui, sans-serif';
   ctx.fillStyle = '#5c6478';
-  ctx.fillText('W/S move   cursor aims   A/D turn   M map', VIEW_W - 14, top + HUD_H / 2);
+  ctx.fillText('W/S forward   A/D sidestep   cursor steers   M map', VIEW_W - 14, top + HUD_H / 2);
   ctx.textAlign = 'left';
 }
 
@@ -991,7 +1016,7 @@ function draw() {
     ctx.textAlign = 'center';
     ctx.font = '13px system-ui, sans-serif';
     ctx.fillStyle = 'rgba(232, 223, 208, 0.5)';
-    ctx.fillText('move the cursor over the view to aim', VIEW_W / 2, VIEW_H - 16);
+    ctx.fillText('move the cursor over the view to steer', VIEW_W / 2, VIEW_H - 16);
     ctx.textAlign = 'left';
   }
   drawObjective();
