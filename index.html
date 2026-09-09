@@ -226,19 +226,14 @@ let pointerInView = false;
 let pointerNX = 0, pointerNY = 0;   // -1 .. 1 across the 3D view
 let clutch = false;                 // button held: the view ignores the cursor
 
-// The cursor is now the only way to turn, so it has to do two jobs.
+// The cursor turns you, and it does it one way only: where the cursor
+// sits IS which way you face. Sweeping the cursor from one side of the
+// view to the other takes you the whole way round, 360 degrees, so every
+// direction is reachable without the view ever drifting on its own.
 //
-// Across the middle of the screen it AIMS: the view swings to match where
-// the cursor sits, holds still when the cursor holds still, and comes back
-// when the cursor comes back. That is the part that should feel precise.
-//
-// Push past the aim zone into the outer edges and it also STEERS, swinging
-// you round for as long as you keep the cursor out there. Without that you
-// could never turn more than a few degrees, because a real cursor stops at
-// the edge of the window.
-let LOOK_YAW = 0.95;            // how far the view swings across the aim zone
-let AIM_ZONE   = 0.72;          // fraction of the half-screen that is pure aiming
-let EDGE_TURN_RATE = 2.8;       // radians per second once you push past it
+// Left edge is half a turn one way, right edge is half a turn the other,
+// middle is straight ahead. Hold the cursor still and you stay still.
+let LOOK_YAW = Math.PI;         // half a turn at each edge -> a full turn across
 let PITCH_GAIN = 1.5;           // vertical sensitivity
 
 // How much of the cursor's swing is currently folded into the view.
@@ -255,8 +250,7 @@ function cursorPitch() {
 // Called when you let go of the button: keep the view exactly where it is,
 // but treat wherever the cursor now sits as the new neutral.
 function rebaseToCursor() {
-  const nx = Math.max(-1, Math.min(1, pointerNX));
-  appliedYaw = Math.max(-1, Math.min(1, nx / AIM_ZONE)) * LOOK_YAW;
+  appliedYaw = Math.max(-1, Math.min(1, pointerNX)) * LOOK_YAW;
   pitchOffset = horizon - cursorPitch();
 }
 
@@ -278,7 +272,7 @@ canvas.addEventListener('mouseleave', () => { pointerInView = false; });
 // The view points where the cursor points. Cursor in the middle means
 // straight ahead; move it and the view swings to match; bring it back
 // and the view comes back with it. Nothing drifts on its own.
-function lookWithCursor(dt) {
+function lookWithCursor() {
   if (clutch) return;                // button held: the view stays put
 
   if (!pointerInView) {
@@ -286,18 +280,12 @@ function lookWithCursor(dt) {
     appliedYaw = 0;
     return;
   }
-  const nx = Math.max(-1, Math.min(1, pointerNX));
 
-  // aiming: absolute, so nothing drifts while the cursor is still
-  const aim = Math.max(-1, Math.min(1, nx / AIM_ZONE)) * LOOK_YAW;
+  // Straight mapping: cursor position is the direction you face. Nothing
+  // accumulates, so holding the cursor still holds the view still.
+  const aim = Math.max(-1, Math.min(1, pointerNX)) * LOOK_YAW;
   player.angle += aim - appliedYaw;  // only ever apply the difference
   appliedYaw = aim;
-
-  // steering: only out at the edges, and only while you hold it there
-  const past = Math.abs(nx) - AIM_ZONE;
-  if (past > 0) {
-    player.angle += Math.sign(nx) * (past / (1 - AIM_ZONE)) * EDGE_TURN_RATE * dt;
-  }
 
   horizon = Math.max(-HORIZON_LIMIT, Math.min(HORIZON_LIMIT, pitchOffset + cursorPitch()));
 }
@@ -442,7 +430,7 @@ function update(dt) {
   if (messageTimer > 0) { messageTimer -= dt; if (messageTimer <= 0) message = ''; }
   if (gameState !== 'playing') return;
 
-  lookWithCursor(dt);
+  lookWithCursor();
   // --- walking and stepping sideways ---
   // W/S go the way you are facing. A/D step left and right without
   // changing which way you face -- the cursor does all the turning.
