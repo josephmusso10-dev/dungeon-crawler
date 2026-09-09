@@ -56,44 +56,60 @@ canvas.height = VIEW_H + HUD_H;
 // x = 1.5 means "in the middle of column 1".
 // ---------------------------------------------------------------
 const MAP = [
-  '#################################',
-  '#############........##........##',
-  '##.......####........##........##',
-  '##.............................##',
-  '##.......##..........##........##',
-  '###.#.#####..........############',
-  '###.#.#####..####################',
-  '###.#.#####..####################',
-  '###.#.##......#############....##',
-  '#..............................##',
-  'E..............................##',
-  '#.....##......###........####.###',
-  '#.............#######.#######.###',
-  '#.....######.########.#####....##',
-  '#.....######.#####......###....##',
-  '###.#.######.#####.............##',
-  '###.#.####.....###......###....##',
-  '###............................##',
-  '#.....####.....###......#####.###',
-  '#.............................###',
-  '#.....###########################',
-  '#################################',
+  '##################E######################',
+  '#########..........#####.#.....###.....##',
+  '##.....##..........#####.#.....###.....##',
+  '##.....................................##',
+  '##.....##..........##BBB.BBB...###.....##',
+  '##...................B.....B...........##',
+  '##.....######.#######B.....B.#######.####',
+  '##.....######.#######B.........#####.####',
+  '###.##.######.....###B.....B...#####.####',
+  '###.##.######.....###B.....B...#####.####',
+  '##.........##.....###BBB.BBB...........##',
+  '##.........##.....#####........##......##',
+  '##.........##.....#####........##BBB.BBB#',
+  '##.........##.....#####..........B.....B#',
+  '##................#########.#####B.....B#',
+  '##.........##.....#########............B#',
+  '##.........##.#######........####B.....B#',
+  '##.........##.#######........####B.....B#',
+  '###.##.######.#######........####BBB.BBB#',
+  '###.##.######.#######........###......###',
+  '#......#.................BBB.BBB......###',
+  '#......#..........###....B.....B......###',
+  '#........................B.....B......###',
+  '#.....................................###',
+  '########..........#######B.....B......###',
+  '########..........#######B.....B......###',
+  '########..........#######BBB.BBB......###',
+  '############################.############',
+  '#########################################',
+];
+
+// Where the ceiling lamps hang. They light the place and are most of
+// what makes it feel like somewhere rather than a set of corridors.
+const LAMPS = [
+  [3,2],[9,2],[26,2],[34,2],[18,3],[23,5],[13,8],[30,8],
+  [3,10],[24,11],[37,11],[10,13],[17,14],[34,14],[2,15],[7,16],
+  [22,16],[33,19],[9,20],[21,21],[27,21],[5,22],[35,23],[8,25],
+  [14,25],
 ];
 
 const COLS = MAP[0].length;
 const ROWS = MAP.length;
 
-const START_COL = 17, START_ROW = 3;
-const ENEMY_SPAWNS = [[21, 17], [29, 9], [3, 12]];
+const START_COL = 15, START_ROW = 12;
+const ENEMY_SPAWNS = [[37, 26], [38, 10], [36, 1], [33, 19], [9, 1]];   // five of them now
 // The three keys, in the order you must collect them. Each one lives in
 // a named part of the dungeon; the objective tracker tells you which is
 // next and roughly which way it lies. Nothing is marked on the map.
 // Ordered so most of the journey happens while they are still slow, and
 // the run to the door at the end is short. Legs: 34, 13, 27, 11 steps.
 const KEYS = [
-  { tile: [29, 15], name: 'Bone Key',  place: 'the Cistern'   },
-  { tile: [21, 10], name: 'Iron Key',  place: 'the Guardroom' },
-  { tile: [ 3, 19], name: 'Ember Key', place: 'the Crypt'     },
+  { tile: [36, 15], name: 'Bone Key',  place: 'the Ossuary'   },
+  { tile: [28, 23], name: 'Iron Key',  place: 'the Reliquary' },
+  { tile: [24,  7], name: 'Ember Key', place: 'the Sanctum'   },
 ];
 const KEY_TILES = KEYS.map(k => k.tile);
 const KEYS_NEEDED  = KEY_TILES.length;
@@ -106,8 +122,10 @@ function tileAt(col, row) {
 // like a wall, just in its own colour.
 function isWall(col, row) {
   const t = tileAt(col, row);
-  return t === '#' || t === 'E';
+  return t === '#' || t === 'E' || t === 'B';
 }
+// 'B' is the stonework of the shrine buildings the keys sit inside.
+function isShrine(col, row) { return tileAt(col, row) === 'B'; }
 function isDoor(col, row) { return tileAt(col, row) === 'E'; }
 
 let doorCol = 0, doorRow = 0;
@@ -476,6 +494,96 @@ function fog(dist) {
   return Math.max(0.15, Math.min(1, 1.35 - dist / 11));
 }
 
+// ===============================================================
+// Wall surfaces and lamplight
+// ===============================================================
+
+// Rather than ship image files, we paint two small textures once at
+// startup onto off-screen canvases and then slice one-pixel-wide columns
+// out of them. That is the same trick the old raycasters used, and it
+// keeps everything in this one file.
+const TEX_SIZE = 64;
+
+function makeTexture(paint) {
+  const c = document.createElement('canvas');
+  c.width = TEX_SIZE; c.height = TEX_SIZE;
+  paint(c.getContext('2d'));
+  return c;
+}
+
+// Ordinary dungeon stone: courses of blocks with mortar between them,
+// plus some grime so it is not flat.
+const WALL_TEX = makeTexture((g) => {
+  g.fillStyle = '#5c5346';
+  g.fillRect(0, 0, TEX_SIZE, TEX_SIZE);
+  const courses = 4, blockH = TEX_SIZE / courses;
+  for (let row = 0; row < courses; row++) {
+    const offset = (row % 2) ? blockH : 0;      // stagger every other course
+    for (let x = -blockH; x < TEX_SIZE; x += blockH * 2) {
+      g.fillStyle = 'rgba(0,0,0,0.16)';
+      g.fillRect(x + offset, row * blockH, 1.5, blockH);       // vertical joint
+    }
+    g.fillStyle = 'rgba(0,0,0,0.22)';
+    g.fillRect(0, row * blockH, TEX_SIZE, 1.5);                // horizontal joint
+    g.fillStyle = 'rgba(255,255,255,0.05)';
+    g.fillRect(0, row * blockH + 2, TEX_SIZE, 1);              // highlight under it
+  }
+  for (let i = 0; i < 260; i++) {                              // grime
+    const x = Math.random() * TEX_SIZE, y = Math.random() * TEX_SIZE;
+    g.fillStyle = 'rgba(0,0,0,' + (0.03 + Math.random() * 0.07).toFixed(3) + ')';
+    g.fillRect(x, y, 1 + Math.random() * 2, 1 + Math.random() * 2);
+  }
+});
+
+// The shrine buildings: darker stone, carved with a crude eye motif so
+// you can tell at a glance that a building is not just more corridor.
+const SHRINE_TEX = makeTexture((g) => {
+  g.fillStyle = '#3d2b34';
+  g.fillRect(0, 0, TEX_SIZE, TEX_SIZE);
+  for (let row = 0; row < 8; row++) {
+    g.fillStyle = 'rgba(0,0,0,0.28)';
+    g.fillRect(0, row * 8, TEX_SIZE, 1);
+  }
+  // carved ring with a slit pupil, centred
+  g.strokeStyle = 'rgba(226,170,120,0.55)';
+  g.lineWidth = 2;
+  g.beginPath(); g.arc(32, 32, 13, 0, Math.PI * 2); g.stroke();
+  g.beginPath(); g.arc(32, 32, 19, 0, Math.PI * 2); g.stroke();
+  g.fillStyle = 'rgba(20,10,14,0.85)';
+  g.beginPath(); g.ellipse(32, 32, 4, 10, 0, 0, Math.PI * 2); g.fill();
+  for (let i = 0; i < 200; i++) {
+    const x = Math.random() * TEX_SIZE, y = Math.random() * TEX_SIZE;
+    g.fillStyle = 'rgba(0,0,0,' + (0.04 + Math.random() * 0.09).toFixed(3) + ')';
+    g.fillRect(x, y, 1 + Math.random() * 2, 1 + Math.random() * 2);
+  }
+});
+
+// ---------------------------------------------------------------
+// Lamplight
+//
+// Worked out once at startup: how brightly each floor tile is lit by the
+// lamps hanging over it. Walls then borrow the light of the tile you are
+// standing in when you look at them, which costs nothing per frame and
+// gives pools of light with dark stretches between.
+// ---------------------------------------------------------------
+const lightMap = new Float32Array(COLS * ROWS);
+(function buildLightMap() {
+  for (let r = 0; r < ROWS; r++) {
+    for (let c = 0; c < COLS; c++) {
+      let lit = 0;
+      for (const [lc, lr] of LAMPS) {
+        const d = Math.hypot(lc - c, lr - r);
+        if (d < 7.5) lit += (1 - d / 7.5) * (1 - d / 7.5);
+      }
+      lightMap[r * COLS + c] = Math.min(1, lit);
+    }
+  }
+})();
+function lightAt(col, row) {
+  if (col < 0 || row < 0 || col >= COLS || row >= ROWS) return 0;
+  return lightMap[row * COLS + col];
+}
+
 function castWalls() {
   // Direction the player faces, plus a "camera plane" at right angles
   // to it. Sweeping across that plane is what gives us a field of view.
@@ -515,17 +623,33 @@ function castWalls() {
     const height = Math.min(VIEW_H * 4, VIEW_H / dist);
     const top = (VIEW_H - height) / 2 + horizon;
 
-    // Walls facing one way are drawn darker than the other, which is
-    // what makes corners readable.
-    let f = fog(dist) * (side === 1 ? 0.72 : 1);
+    // Where along the wall did the ray land? That picks the column of
+    // the texture we slice out.
+    let wallX = (side === 0) ? player.y + dist * rayY : player.x + dist * rayX;
+    wallX -= Math.floor(wallX);
+    let texX = Math.floor(wallX * TEX_SIZE);
+    if (texX < 0) texX = 0; else if (texX >= TEX_SIZE) texX = TEX_SIZE - 1;
+
+    // Brightness: distance haze, the darker face of a corner, and how
+    // much lamplight reaches the floor tile in front of this wall.
+    const lit = lightAt(mapX - stepX, mapY - stepY);
+    let f = fog(dist) * (side === 1 ? 0.72 : 1) * (0.30 + 0.70 * lit);
+
     if (isDoor(mapX, mapY)) {
       // The way out: red while locked, green once you have every key
-      if (player.keys >= KEYS_NEEDED) ctx.fillStyle = shade(76, 200, 90, f);
-      else                            ctx.fillStyle = shade(190, 60, 70, f);
+      if (player.keys >= KEYS_NEEDED) ctx.fillStyle = shade(76, 200, 90, Math.min(1, f * 1.6));
+      else                            ctx.fillStyle = shade(190, 60, 70, Math.min(1, f * 1.6));
+      ctx.fillRect(x, top, 1, height);
     } else {
-      ctx.fillStyle = shade(128, 114, 96, f);
+      ctx.drawImage(isShrine(mapX, mapY) ? SHRINE_TEX : WALL_TEX,
+                    texX, 0, 1, TEX_SIZE, x, top, 1, height);
+      // shade the slice by drawing darkness over it
+      const dark = 1 - Math.max(0, Math.min(1, f));
+      if (dark > 0.01) {
+        ctx.fillStyle = 'rgba(6,4,4,' + dark.toFixed(3) + ')';
+        ctx.fillRect(x, top, 1, height);
+      }
     }
-    ctx.fillRect(x, top, 1, height);
   }
 }
 
@@ -657,6 +781,55 @@ function drawPerson(wx, wy, tint, awake) {
   }
 }
 
+// A lamp on a short chain, hung above head height. Same projection as
+// everything else, just placed high instead of on the floor.
+function drawLamp(wx, wy) {
+  const dirX = Math.cos(player.angle), dirY = Math.sin(player.angle);
+  const planeX = -dirY * 0.66, planeY = dirX * 0.66;
+  const sx = wx - player.x, sy = wy - player.y;
+  const invDet = 1 / (planeX * dirY - dirX * planeY);
+  const tx = invDet * (dirY * sx - dirX * sy);
+  const ty = invDet * (-planeY * sx + planeX * sy);
+  if (ty <= 0.25 || ty > 17) return;
+
+  const screenX = (VIEW_W / 2) * (1 + tx / ty);
+  const unit = VIEW_H / ty;                 // one world unit, in pixels, at this depth
+  const bulbY = VIEW_H / 2 + horizon - unit * 0.40;
+  const bulbR = Math.max(1.5, unit * 0.055);
+  const col = Math.round(screenX);
+  if (col < 0 || col >= VIEW_W || ty >= zBuffer[col]) return;   // behind a wall
+
+  const f = fog(ty);
+
+  // chain up into the dark
+  ctx.fillStyle = shade(58, 50, 44, f);
+  ctx.fillRect(screenX - Math.max(0.5, unit * 0.008), bulbY - unit * 0.16,
+               Math.max(1, unit * 0.016), unit * 0.16);
+
+  // halo, then the bulb itself
+  ctx.globalAlpha = Math.min(0.22, 0.22 * f);
+  ctx.fillStyle = 'rgb(206,140,64)';
+  ctx.beginPath(); ctx.arc(screenX, bulbY, bulbR * 6.5, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = Math.min(0.45, 0.45 * f);
+  ctx.beginPath(); ctx.arc(screenX, bulbY, bulbR * 3.4, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = Math.min(0.8, 0.8 * f);
+  ctx.beginPath(); ctx.arc(screenX, bulbY, bulbR * 1.7, 0, Math.PI * 2); ctx.fill();
+  ctx.globalAlpha = 1;
+  ctx.fillStyle = 'rgb(255,226,170)';
+  ctx.beginPath(); ctx.arc(screenX, bulbY, bulbR, 0, Math.PI * 2); ctx.fill();
+}
+
+function drawLamps() {
+  // furthest first so nearer lamps paint over them
+  const near = [];
+  for (const [c, r] of LAMPS) {
+    const d = Math.hypot(c + 0.5 - player.x, r + 0.5 - player.y);
+    if (d < 17) near.push({ x: c + 0.5, y: r + 0.5, d });
+  }
+  near.sort((a, b) => b.d - a.d);
+  for (const l of near) drawLamp(l.x, l.y);
+}
+
 function drawSprites() {
   // Furthest first, so nearer things paint over them
   const list = [];
@@ -673,7 +846,7 @@ function drawSprites() {
 }
 
 function drawMinimap() {
-  const scale = 5, pad = 10;
+  const scale = 4, pad = 10;
   const w = COLS * scale, h = ROWS * scale;
   const ox = VIEW_W - w - pad, oy = pad;
 
@@ -683,6 +856,7 @@ function drawMinimap() {
 
   for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) {
     if (isDoor(c, r))      ctx.fillStyle = player.keys >= KEYS_NEEDED ? '#4caf50' : '#bd3c46';
+    else if (isShrine(c, r)) ctx.fillStyle = '#6b4a52';
     else if (isWall(c, r)) ctx.fillStyle = '#4a4239';
     else                   ctx.fillStyle = '#1c1815';
     ctx.fillRect(ox + c * scale, oy + r * scale, scale, scale);
@@ -798,12 +972,13 @@ function drawBanner(title, subtitle, colour) {
 function draw() {
   // Ceiling and floor
   const skyline = Math.max(0, Math.min(VIEW_H, VIEW_H / 2 + horizon));
-  ctx.fillStyle = '#131010';
+  ctx.fillStyle = '#0d0b0a';
   ctx.fillRect(0, 0, VIEW_W, skyline);
-  ctx.fillStyle = '#2b2320';
+  ctx.fillStyle = '#1e1815';
   ctx.fillRect(0, skyline, VIEW_W, VIEW_H - skyline);
 
   castWalls();
+  drawLamps();
   drawSprites();
 
   // A red wash when you have just been hit
