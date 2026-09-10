@@ -56,70 +56,84 @@ canvas.height = VIEW_H + HUD_H;
 // x = 1.5 means "in the middle of column 1".
 // ---------------------------------------------------------------
 const MAP = [
-  '#####################################################',
-  '#RRRRRRRRRRRRRRRRRRRR.RRRRRRRRRRRRRRRRRRRRRRRRRRRRRR#',
-  '#RRRRRRRRRRRRRR#####...#####RR...........RRRRRRRRRRR#',
-  '#RRRRRRRRRRRRRR#...........#..............RRR....RRR#',
-  '#RRRRRRRRRRRRRR#.P..P..P...#...R..........RR......RR#',
-  '#RRRRR.RRRRRRRR................RR...BBB.BBB........R#',
-  '#RRRRR...........P..P..P.......R....B.....B........R#',
-  '#RRRRR.RRRRRRRR.....................B.....B.........#',
-  '#RRRRR.RRRRRRRR#.P..P..P...#........................E',
-  '#RRRRR.RRRRRRRR#...........#........B.....B....RR..R#',
-  '#RRRRR.RRRRRRRR#####...#####........B.....B...RRRRRR#',
-  '#RRRRR.RRRRRRRR.....................BBB.BBB....RRRRR#',
-  '#RRBBB.BBBRRRRR.................RR......RRR.....RRRR#',
-  '#RRB.....BRRRRRR...........RR..RRR......RRR......RRR#',
-  '#RRB.....BRRRRRR....RR....RRRRRRRR......RRR......RRR#',
-  '#..........RRRR....RRRR...RRRRRRRR......RRR.....RRRR#',
-  '#RRB.....B.......RRRRRR...RRRRRRRRR......RR.....RRRR#',
-  '#RRB.....B.....RRRRRRRR...RRRRRRRRRR.............RRR#',
-  '#R.BBB.BBB....RRRRRRRRR..RRRRRRRRRRRR..............R#',
-  '#............RRRRRRRRR...RRRRRRRRRRRRR..............#',
-  '#...........RRRR........RRRRRRRRRRRRRR..............#',
-  '#R..........RRR........RRRRRRRRRRRRRRR.............R#',
-  '#R.........RRRR.......RRRRRRRRRRRRRRR......BBB.BBB.R#',
-  '#RR........RRRR......RRRRRRRRRRRRRRRR......B.....B.R#',
-  '#RRR......RRRRRR......RR.RRRRRRRRRRRRR.....B.....B.R#',
-  '#RRRRRRRRRRRRRRRR.........RRRRRRRRRRRRRR...........R#',
-  '#RRRRRRRRRRRRRRRRR........RRRRRRRRRRR.RR...B.....B.R#',
-  '#RRRRRRRRRRRRRRRRRR.......RRRRRRRRRR.......B.....B.R#',
-  '#RRRRRRRRRRRRRRRRRR.......RRRRRRRRR........BBB.BBB.R#',
-  '#RRRRRRRRRRRRRRRRR........RRRRRR...................R#',
-  '#RRRRRRRRRRRRRRRR.........RRRRRR...................R#',
-  '#RRRRRRRRRRRRR............RRRRRRR..................R#',
-  '#RRRRRRRRRRRRR...RR.......RRRRRRRR...RR....R.......R#',
-  '#RRRRRRRRRRRRR..RRRR.........RRRRRRRRRRR.RRRRR....RR#',
-  '#RRRRRRRRRRRRRRRRRRRR.........RRRRRRRRRRRRRRRRRRRRRR#',
-  '#RRRRRRRRRRRRRRRRRRRRRRRRR...RRRRRRRRRRRRRRRRRRRRRRR#',
-  '#####################################################',
+  '#################################################################',
+  '#RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR.RRRRRRRRRRRRRRRRRRRRRRRR#',
+  '#RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR#####...#####RRRRRRRRR..RRRRRRR#',
+  '#RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR#...........#RRRRRRR.........RR#',
+  '#RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR#.P..P..P...#RRRRR.BBB.BBB....R#',
+  '#RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR.............RRRR..B.....B....R#',
+  '#RRRRRRRRRRRRRRRRRRRRRRRR..........P..P..P..........B.....B....R#',
+  '#RRRRRRRRRRRRRRRR.RRRRRRRRRRRRRRR..............................R#',
+  '#RRRRRRRRRRRRRRRR.RRRRRRRRRRRRRRR#.P..P..P...#......B.....B....R#',
+  '#RRRRRRRRRRRRRRRR.RRRRRRRRRRRRRRR#...........#..R...B.....B...RR#',
+  '#RRRRRRRRRRRRRRRR.RRRRRRRRRRRRRRR#####...#####.RRR..BBB.BBB..RRR#',
+  '#RRRRRRRRRRRRRRRR.RRRRRRRRRRRRRRRRRRRRR.R.....RRR............RRR#',
+  '#RRRRRRRRRRRRRRRR.RRRRRRRRRRRRRRRRRRRRR.RR.....R..............RR#',
+  '#RRRRRRRRRRRRRRRR.RRRRRRRRRRRRRRRRRRRRR.RRR....................R#',
+  '#RRRRRRRRRRRRRRRR.RRRRRRRRRRRRRRRRRRRRR.RRRR...................R#',
+  '#RRRRRRR########...########RRRRRRRRRRRR.RRRRR....RRRR..........R#',
+  '#RRRRRRR#.................#RRRRRRRRRRRR.RRRRR...RRRRRR.........R#',
+  '#RRRRRRR..P..P..P..P..P....RRRRRRRRRRRR.RRRRRR..RRRRRR.........R#',
+  '#...................................RRR.RRRRRRR..RRRR..........R#',
+  '#R...RRR..P..P..P..P..P....BBB.BBB...RRRRRRRRRRR..RRR.........RR#',
+  '#R...RRR#.................#B.....B....RRRRRRRRRR.............RRR#',
+  '#RR..RRR########...########B.....B.....RRRRRRRR..............RRR#',
+  '#RR..RRR.......RR.R.....................RRRRRRR........RR...RRRR#',
+  '#R...RRR.......RR.R........B.....B..........RRR.............RRRR#',
+  '#R....R.........R..........B.....B...........RRR............RRRR#',
+  '#R.....................RRR.BBB.BBB............RR.............RRR#',
+  '#.....................RRRRRR..........RR.......RR.............RR#',
+  'E.....................RRRRRRRR.......RRRR......RRR.............R#',
+  '#R.....BBB.BBB.........RRRRRRR......RRRRR.......R...............#',
+  '#R.....B.....B.............RRR.....RRRRRR.......................#',
+  '#RR....B.....B....RR..............RRRRRRR..................R....#',
+  '#RRRRR............RRR............RRRR......................R....#',
+  '#RRRRRRB.....B......R...........RRRR...........................R#',
+  '#RRRRRRB.....B..................RRRR...........................R#',
+  '#RRRRRRBBB.BBB..............RR.RRRRR...........................R#',
+  '#RRRRRR.....RRR............RRRRRRRRR...........................R#',
+  '#RRRRRR.....RRR...........RRRRRRRRRRR..............RRRR........R#',
+  '#RRRRRR.....RRRR..RRR....RRRRRRRRRRRRRRRR..........RRRRRR......R#',
+  '#RRRRRRR....RRRRRRRRRRRRRRRRRRRRRRRRRRRRR............RRRRR.....R#',
+  '#RRRRRRRRR...RRRRRRRRRRRRRRRRRRRRRRRRRRRR.............RRRR.....R#',
+  '#RRRRRRRRRR.....RRRRRRRRRRRRRRRRRRRRRRRRR............RRRRR.....R#',
+  '#RRRRRRRRRRR...RRRRRRRRRRRRRRRRRRRRRRRRRRR..........RRRRRR....RR#',
+  '#RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR.....RRRRRRRRRRRRR#',
+  '#RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR#',
+  '#################################################################',
 ];
 
 // Where the ceiling lamps hang. They light the place and are most of
 // what makes it feel like somewhere rather than a set of corridors.
 const LAMPS = [
-  [21,2],[31,2],[36,2],[46,3],[26,4],[16,5],[6,6],[39,6],
-  [50,6],[21,7],[30,7],[44,8],[35,9],[16,11],[24,11],[29,12],
-  [39,12],[5,13],[44,13],[34,14],[10,16],[15,16],[23,16],[38,17],
-  [47,17],[2,19],[7,20],[18,20],[42,20],[50,21],[38,23],[45,24],
-  [18,25],[23,25],[41,27],[36,28],[46,29],[18,30],[23,30],[40,32],
-  [27,33],
+  [39,2],[55,3],[60,3],[44,4],[34,5],[49,6],[39,7],[54,8],
+  [59,8],[42,11],[50,11],[55,13],[60,13],[46,14],[17,15],[11,16],
+  [23,16],[2,18],[30,18],[54,18],[59,18],[35,19],[48,19],[14,20],
+  [20,20],[9,22],[25,22],[3,23],[30,23],[38,23],[51,23],[56,23],
+  [17,24],[43,24],[12,26],[34,26],[60,26],[6,27],[21,27],[46,28],
+  [51,28],[16,29],[30,29],[41,29],[56,29],[25,30],[9,31],[61,31],
+  [37,32],[19,33],[44,33],[49,33],[54,34],[24,35],[7,36],[40,36],
+  [59,36],[45,38],[50,38],[11,39],[59,41],
 ];
 
 const COLS = MAP[0].length;
 const ROWS = MAP.length;
 
-const START_COL = 21, START_ROW = 7;
-const ENEMY_SPAWNS = [[50, 32], [32, 30], [43, 30], [50, 22], [37, 26], [28, 35], [14, 33]];   // seven of them
+const START_COL = 39, START_ROW = 7;
+// Eight. A ninth tips the cavern from a hard fight into a
+// guaranteed death -- measured at 12/12 escapes with eight, 0/12 with nine.
+const ENEMY_SPAWNS = [[15, 40], [7, 37], [4, 21], [17, 7], [9, 16], [9, 25], [14, 20], [16, 32]];
 // The three keys, in the order you must collect them. Each one lives in
 // a named part of the dungeon; the objective tracker tells you which is
 // next and roughly which way it lies. Nothing is marked on the map.
 // Ordered so most of the journey happens while they are still slow, and
 // the run to the door at the end is short. Legs: 34, 13, 27, 11 steps.
+// Ordered so the long walking happens while the guards are still slow,
+// and the dangerous end of the run is short. Legs: 16, 54, 29, 13 steps.
 const KEYS = [
-  { tile: [46, 25], name: 'Bone Key', place: 'the Ossuary' },
-  { tile: [ 6, 15], name: 'Iron Key', place: 'the Hollow' },
-  { tile: [39,  8], name: 'Ember Key', place: 'the Deep Vault' },
+  { tile: [55,  7], name: 'Bone Key', place: 'the Ossuary' },
+  { tile: [30, 22], name: 'Iron Key', place: 'the Hollow' },
+  { tile: [10, 31], name: 'Ember Key', place: 'the Deep Vault' },
 ];
 const KEY_TILES = KEYS.map(k => k.tile);
 const KEYS_NEEDED  = KEY_TILES.length;
@@ -163,6 +177,7 @@ const ENEMY_TIERS = [
 function tier() { return ENEMY_TIERS[Math.min(player.keys, ENEMY_TIERS.length - 1)]; }
 let ALERT_MEMORY  = 2.0;    // seconds it keeps hunting after losing sight of you
 let KEY_RECOIL    = 1.6;    // seconds they stagger when the dungeon escalates
+let PATROL_PACE   = 0.55;   // how briskly they walk a beat, as a share of chase speed    // seconds they stagger when the dungeon escalates
 const RADIUS      = 0.22;   // how fat you are, for bumping into walls
 
 const player = { x: 0, y: 0, angle: 0, health: MAX_HEALTH, invuln: 0, keys: 0 };
@@ -200,7 +215,11 @@ function resetGame() {
     wanderX: c + 0.5,  // unused while patrolling, kept for the stagger
     wanderY: r + 0.5,
   }));
-  enemies.forEach((e, i) => { e.patrol = i % Math.max(1, PATROL_FIELDS.length); });
+  enemies.forEach((e, i) => {
+    e.patrol = PATROL_FIELDS.length
+      ? Math.floor(i * PATROL_FIELDS.length / enemies.length) % PATROL_FIELDS.length
+      : 0;
+  });
   keys3d  = KEYS.map((k) => ({ x: k.tile[0] + 0.5, y: k.tile[1] + 0.5, taken: false }));
 
   flowField = null;
@@ -396,13 +415,39 @@ const PATROL_FIELDS = [];
 
 function buildPatrolFields() {
   PATROL_FIELDS.length = 0;
-  for (const k of KEYS) {
-    PATROL_FIELDS.push({ tile: k.tile, field: buildFlowField(k.tile[0], k.tile[1]) });
-  }
+  const posts = [];
+
+  // the things actually worth guarding
+  for (const k of KEYS) posts.push(k.tile);
   const side = DIRECTIONS
     .map(([dc, dr]) => [doorCol + dc, doorRow + dr])
     .find(([c, r]) => !isWall(c, r));
-  if (side) PATROL_FIELDS.push({ tile: side, field: buildFlowField(side[0], side[1]) });
+  if (side) posts.push(side);
+
+  // Plus a spread of waypoints across the rest of the cavern. Without
+  // these, every guard walks the same four places and they pile up on
+  // top of each other -- and four guards in one spot is not a fight,
+  // it is just death.
+  // Chosen by a fixed sweep of the map, not at random: random waypoints
+  // meant every page load produced a different game, and a difficulty
+  // that moves on its own cannot be measured or tuned.
+  for (let spacing = 18; spacing >= 10 && posts.length < 12; spacing -= 2) {
+    for (let r = 2; r < ROWS - 2 && posts.length < 12; r++) {
+      for (let c = 2; c < COLS - 2 && posts.length < 12; c++) {
+        if (isWall(c, r)) continue;
+        let open = 0;
+        for (const [dc, dr] of DIRECTIONS) if (!isWall(c + dc, r + dr)) open++;
+        if (open < 3) continue;                    // not a poky corner
+        let far = true;
+        for (const [pc, pr] of posts) {
+          if (Math.abs(pc - c) + Math.abs(pr - r) < spacing) { far = false; break; }
+        }
+        if (far) posts.push([c, r]);
+      }
+    }
+  }
+
+  for (const t of posts) PATROL_FIELDS.push({ tile: t, field: buildFlowField(t[0], t[1]) });
 }
 
 // Somewhere new to amble to while it has not spotted you
@@ -460,7 +505,7 @@ function updateEnemy(enemy, dt) {
       targetX = (step % COLS) + 0.5;
       targetY = ((step / COLS) | 0) + 0.5;
     }
-    speed = tier().speed * 0.55;
+    speed = tier().speed * PATROL_PACE;
   } else {
     // no posts to walk (should not happen): shuffle about instead
     if (Math.hypot(enemy.wanderX - enemy.x, enemy.wanderY - enemy.y) < 0.1) pickWanderSpot(enemy);
