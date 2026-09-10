@@ -177,6 +177,7 @@ const ENEMY_TIERS = [
 function tier() { return ENEMY_TIERS[Math.min(player.keys, ENEMY_TIERS.length - 1)]; }
 let ALERT_MEMORY  = 2.0;    // seconds it keeps hunting after losing sight of you
 let KEY_RECOIL    = 1.6;    // seconds they stagger when the dungeon escalates
+let DANGER_RANGE  = 9.0;    // how close a guard has to be before the screen bleeds
 let PATROL_PACE   = 0.55;   // how briskly they walk a beat, as a share of chase speed    // seconds they stagger when the dungeon escalates
 const RADIUS      = 0.22;   // how fat you are, for bumping into walls
 
@@ -1001,6 +1002,77 @@ function drawLamps() {
   for (const l of near) drawLamp(l.x, l.y);
 }
 
+// What each guard is doing right now, named. Three states:
+// staggered by a key, hunting you, or walking its beat.
+function guardMode(e) {
+  if (e.stun > 0)  return { name: 'STAGGERED',  colour: 'rgb(150,160,180)' };
+  if (e.alert > 0) return { name: 'HUNTING',    colour: 'rgb(255,110,80)'  };
+  return             { name: 'PATROLLING', colour: 'rgb(198,184,158)' };
+}
+
+// Float that word above each guard you can actually see. Uses the same
+// projection as the figures, and the same z-buffer test, so a label never
+// shows through a wall its owner is hidden behind.
+function drawGuardLabels() {
+  const dirX = Math.cos(player.angle), dirY = Math.sin(player.angle);
+  const planeX = -dirY * 0.66, planeY = dirX * 0.66;
+
+  ctx.textAlign = 'center';
+  ctx.textBaseline = 'alphabetic';
+  for (const e of enemies) {
+    const sx = e.x - player.x, sy = e.y - player.y;
+    const invDet = 1 / (planeX * dirY - dirX * planeY);
+    const tx = invDet * (dirY * sx - dirX * sy);
+    const ty = invDet * (-planeY * sx + planeX * sy);
+    if (ty <= 0.4 || ty > 14) continue;                 // behind us, or too far to read
+
+    const screenX = (VIEW_W / 2) * (1 + tx / ty);
+    const col = Math.round(screenX);
+    if (col < 0 || col >= VIEW_W || ty >= zBuffer[col]) continue;   // a wall is in front
+
+    const height = Math.min(VIEW_H * 3, (VIEW_H / ty) * 0.82);
+    const headY = VIEW_H / 2 + horizon + (VIEW_H / ty) * 0.09 - height;
+    const size = Math.max(9, Math.min(16, (VIEW_H / ty) * 0.05));
+    const mode = guardMode(e);
+
+    ctx.font = 'bold ' + size.toFixed(0) + 'px system-ui, sans-serif';
+    const w = ctx.measureText(mode.name).width;
+    const y = Math.max(size + 10, headY - 6);
+
+    ctx.globalAlpha = Math.max(0.35, Math.min(1, fog(ty) * 1.5));
+    ctx.fillStyle = 'rgba(8,6,6,0.72)';
+    ctx.fillRect(screenX - w / 2 - 5, y - size - 3, w + 10, size + 7);
+    ctx.fillStyle = mode.colour;
+    ctx.fillText(mode.name, screenX, y);
+    ctx.globalAlpha = 1;
+  }
+  ctx.textAlign = 'left';
+  ctx.textBaseline = 'middle';
+}
+
+// The closer the nearest guard, the harder the edges of the screen bleed.
+// It is the one warning you get about something creeping up behind you.
+function drawDanger() {
+  let nearest = Infinity;
+  for (const e of enemies) {
+    const d = Math.hypot(e.x - player.x, e.y - player.y);
+    if (d < nearest) nearest = d;
+  }
+  if (nearest >= DANGER_RANGE) return 0;
+
+  const closeness = 1 - nearest / DANGER_RANGE;
+  const strength = closeness * closeness;          // stays subtle until they are near
+  const grad = ctx.createRadialGradient(
+    VIEW_W / 2, VIEW_H / 2, VIEW_H * 0.12,
+    VIEW_W / 2, VIEW_H / 2, VIEW_W * 0.60);
+  grad.addColorStop(0, 'rgba(190,24,34,0)');
+  grad.addColorStop(0.55, 'rgba(190,24,34,' + (0.30 * strength).toFixed(3) + ')');
+  grad.addColorStop(1, 'rgba(210,26,36,' + (0.80 * strength).toFixed(3) + ')');
+  ctx.fillStyle = grad;
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+  return strength;
+}
+
 function drawSprites() {
   // Furthest first, so nearer things paint over them
   const list = [];
@@ -1153,6 +1225,8 @@ function draw() {
   castWalls();
   drawLamps();
   drawSprites();
+  drawGuardLabels();
+  drawDanger();
 
   // A red wash when you have just been hit
   if (player.invuln > 0) {
