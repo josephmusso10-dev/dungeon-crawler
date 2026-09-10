@@ -74,7 +74,7 @@ const MAP = [
   '#RRRRRRR########...########RRRRRRRRRRRR.RRRRR....RRRR..........R#',
   '#RRRRRRR#.................#RRRRRRRRRRRR.RRRRR...RRRRRR.........R#',
   '#RRRRRRR..P..P..P..P..P....RRRRRRRRRRRR.RRRRRR..RRRRRR.........R#',
-  '#...................................RRR.RRRRRRR..RRRR..........R#',
+  'E...................................RRR.RRRRRRR..RRRR..........R#',
   '#R...RRR..P..P..P..P..P....BBB.BBB...RRRRRRRRRRR..RRR.........RR#',
   '#R...RRR#.................#B.....B....RRRRRRRRRR.............RRR#',
   '#RR..RRR########...########B.....B.....RRRRRRRR..............RRR#',
@@ -83,7 +83,7 @@ const MAP = [
   '#R....R.........R..........B.....B...........RRR............RRRR#',
   '#R.....................RRR.BBB.BBB............RR.............RRR#',
   '#.....................RRRRRR..........RR.......RR.............RR#',
-  'E.....................RRRRRRRR.......RRRR......RRR.............R#',
+  '#.....................RRRRRRRR.......RRRR......RRR.............R#',
   '#R.....BBB.BBB.........RRRRRRR......RRRRR.......R...............#',
   '#R.....B.....B.............RRR.....RRRRRR.......................#',
   '#RR....B.....B....RR..............RRRRRRR..................R....#',
@@ -185,13 +185,19 @@ const ENEMY_TIERS = [
   { speed: 4.2, you: 3.9, damage: 4, sight: 10, label: 'FRENZIED', colour: [255, 104, 56] },
 ];
 function tier() { return ENEMY_TIERS[Math.min(player.keys, ENEMY_TIERS.length - 1)]; }
+
+// With the last key in hand the dungeon stops guessing. Every guard knows
+// exactly where you are for the rest of the run, and the only thing left
+// between you and the door is distance.
+function theHunt() { return player.keys >= KEYS_NEEDED; }
 let ALERT_MEMORY  = 2.0;    // seconds it keeps hunting after losing sight of you
 let KEY_RECOIL    = 1.6;    // seconds they stagger when the dungeon escalates
 // Sprinting. You can go faster than your normal pace, but only for a few
 // seconds, and running yourself out leaves you slower than you started.
 // Without this you could simply outrun anything in the open, forever.
 let SPRINT_MULT   = 1.55;   // how much faster a sprint is
-let STAMINA_MAX   = 3.2;    // seconds of sprint from full
+let STAMINA_MAX   = 7.0;    // seconds of sprint from full -- enough, just,
+                            // to outrun the whole pack to a door 22 steps away
 let STAMINA_BURN  = 1.0;    // stamina per second while sprinting
 let STAMINA_REGEN = 0.55;   // stamina per second while not
 let WINDED_MULT   = 0.72;   // your pace once you have run yourself out
@@ -531,7 +537,12 @@ function updateEnemy(enemy, dt) {
 
   // Spot you, and remember you for a few seconds after you break away
   const sees = canSee(enemy.x, enemy.y, player.x, player.y);
-  if (sees) {
+
+  if (theHunt()) {
+    // Every key is yours and the whole place knows it. No more hiding:
+    // from here on all of them have your position and are coming.
+    enemy.alert = ALERT_MEMORY;
+  } else if (sees) {
     // The moment it first lays eyes on you it shouts, and everything
     // within earshot comes to where you were standing.
     if (!enemy.sawYou) raiseAlarm(player.x, player.y, SHOUT_RANGE, SHOUT_TIME);
@@ -660,7 +671,7 @@ function update(dt) {
       for (const e of enemies) { e.stun = KEY_RECOIL; e.alert = 0; }
       message = player.keys < KEYS_NEEDED
         ? KEYS[player.keys - 1].name + ' taken  -  they stagger, then come back ' + tier().label
-        : KEYS[KEYS_NEEDED - 1].name + ' taken. They are FRENZIED. RUN for the door.';
+        : 'THE HUNT IS UP. Every one of them knows where you are. RUN.';
       messageTimer = 3;
     }
   }
