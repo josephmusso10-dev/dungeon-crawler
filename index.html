@@ -56,92 +56,123 @@ canvas.height = VIEW_H + HUD_H;
 // x = 1.5 means "in the middle of column 1".
 // ---------------------------------------------------------------
 const MAP = [
-  '#################################################################',
-  '#RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR.RRRRRRRRRRRRRRRRRRRRRRRR#',
-  '#RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR#####...#####RRRRRRRRR..RRRRRRR#',
-  '#RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR#...........#RRRRRRR.........RR#',
-  '#RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR#.P..P..P...#RRRRR.BBB.BBB....R#',
-  '#RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR.............RRRR..B.....B....R#',
-  '#RRRRRRRRRRRRRRRRRRRRRRRR..........P..P..P..........B.....B....R#',
-  '#RRRRRRRRRRRRRRRR.RRRRRRRRRRRRRRR..............................R#',
-  '#RRRRRRRRRRRRRRRR.RRRRRRRRRRRRRRR#.P..P..P...#......B.....B....R#',
-  '#RRRRRRRRRRRRRRRR.RRRRRRRRRRRRRRR#...........#..R...B.....B...RR#',
-  '#RRRRRRRRRRRRRRRR.RRRRRRRRRRRRRRR#####...#####.RRR..BBB.BBB..RRR#',
-  '#RRRRRRRRRRRRRRRR.RRRRRRRRRRRRRRRRRRRRR.R.....RRR............RRR#',
-  '#RRRRRRRRRRRRRRRR.RRRRRRRRRRRRRRRRRRRRR.RR.....R..............RR#',
-  '#RRRRRRRRRRRRRRRR.RRRRRRRRRRRRRRRRRRRRR.RRR....................R#',
-  '#RRRRRRRRRRRRRRRR.RRRRRRRRRRRRRRRRRRRRR.RRRR...................R#',
-  '#RRRRRRR########...########RRRRRRRRRRRR.RRRRR....RRRR..........R#',
-  '#RRRRRRR#.................#RRRRRRRRRRRR.RRRRR...RRRRRR.........R#',
-  '#RRRRRRR..P..P..P..P..P....RRRRRRRRRRRR.RRRRRR..RRRRRR.........R#',
-  'E...................................RRR.RRRRRRR..RRRR..........R#',
-  '#R...RRR..P..P..P..P..P....BBB.BBB...RRRRRRRRRRR..RRR.........RR#',
-  '#R...RRR#.................#B.....B....RRRRRRRRRR.............RRR#',
-  '#RR..RRR########...########B.....B.....RRRRRRRR..............RRR#',
-  '#RR..RRR.......RR.R.....................RRRRRRR........RR...RRRR#',
-  '#R...RRR.......RR.R........B.....B..........RRR.............RRRR#',
-  '#R....R.........R..........B.....B...........RRR............RRRR#',
-  '#R.....................RRR.BBB.BBB............RR.............RRR#',
-  '#.....................RRRRRR..........RR.......RR.............RR#',
-  '#.....................RRRRRRRR.......RRRR......RRR.............R#',
-  '#R.....BBB.BBB.........RRRRRRR......RRRRR.......R...............#',
-  '#R.....B.....B.............RRR.....RRRRRR.......................#',
-  '#RR....B.....B....RR..............RRRRRRR..................R....#',
-  '#RRRRR............RRR............RRRR......................R....#',
-  '#RRRRRRB.....B......R...........RRRR...........................R#',
-  '#RRRRRRB.....B..................RRRR...........................R#',
-  '#RRRRRRBBB.BBB..............RR.RRRRR...........................R#',
-  '#RRRRRR.....RRR............RRRRRRRRR...........................R#',
-  '#RRRRRR.....RRR...........RRRRRRRRRRR..............RRRR........R#',
-  '#RRRRRR.....RRRR..RRR....RRRRRRRRRRRRRRRR..........RRRRRR......R#',
-  '#RRRRRRR....RRRRRRRRRRRRRRRRRRRRRRRRRRRRR............RRRRR.....R#',
-  '#RRRRRRRRR...RRRRRRRRRRRRRRRRRRRRRRRRRRRR.............RRRR.....R#',
-  '#RRRRRRRRRR.....RRRRRRRRRRRRRRRRRRRRRRRRR............RRRRR.....R#',
-  '#RRRRRRRRRRR...RRRRRRRRRRRRRRRRRRRRRRRRRRR..........RRRRRR....RR#',
-  '#RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR.....RRRRRRRRRRRRR#',
-  '#RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR#',
-  '#################################################################',
+  '############################################################################################',
+  '#RRRRRR.....RRRRRR..RRRRRRRRR..RRR..RRRRRRRRRRRRRRRRR..RRRRRRRRRRRRRRRR.........RRRRR.RRRRR#',
+  '#R#####...#####RR....RRRRRRR.........RRRRRRR............RRRRRRRRRRRRR............RBBB.BBBRR#',
+  '#R#...........#R.....RRRR.............RRRRR..............RRRRRRRRRRRR.RR..........B.....BRR#',
+  '#R#.P..P..P...#R.....RRRR..............RRR.................RR....RRRRRRRRRRRR.....B.....BRR#',
+  '#R....................RRRRR...RR..................................RRRRRRRRRRRR.............#',
+  '#...P..P..P............RRRRRRRRRR..............R..................RRRRRRRRRRRRR...B.....BRR#',
+  '#R.....................RRRRRRRRRR.....R.......RR..................RRRRR....RRRRR..B.....BRR#',
+  '#R#.P..P..P...#.........RRRRRRRR.....RRR.......R..................RRRR.......RRRR.BBB.BBBRR#',
+  '#R#...........#.........RRRRRRRR......R...........................RRRR........RRRRRR....RRR#',
+  '#R#####...#####.........RRRRRRRR.................................RRRRR.........RRRRRR...RRR#',
+  '#R.....R.RR.............RRRRRRRR....................RRRR.........RRRRRR.........RRRRR...RRR#',
+  '#R.....R.R.............RRRRRRRR.....................RRRRR.......RRRRRRR.................RRR#',
+  '#R.....................RRR..........................RRRRR........R..RR..................RRR#',
+  '#RR...............R..................................RRRR................................RR#',
+  '#RRR...............########...########...............RRRRR...............................RR#',
+  '#RRR...............#.................#...............RRRRRR..............................RR#',
+  '#RRRR................P..P..P..P..P...................RRRRRRRR...RR.......................RR#',
+  '#RRRRRRR......RRR....................................RRRRRRRRRRRRRR............RR.........R#',
+  '#RRRRRRRR......R.....P..P..P..P..P....R..............RRRRRRRRRRRRR....RRRR....RRRR........R#',
+  '#RRRRRRRRR.........#.................#......R.........RRRRRRRRRRRR...RRRRRR..RRRRRR.......R#',
+  '#RRRRRRRRR.........########...########.....RRR.........RRRRRRRRRRR..RRRRRRRRRRRRRRR.......R#',
+  '#RRRRRRRR............RRRR........RRRR.....RRRRRR........RRRRRRRRRRRRRRRRRRRRRRRRRR........R#',
+  '#RRRRRRRR.............RRR........RRR......RRRRRR........RRRRRRRRRRRRRRRRR.................R#',
+  '#RRRRRRRR........................RR.......RRRRRR.......RRRRRRRRRRRRRRRRR..................R#',
+  '#RRRRRRRR........................RR.......RRRRRR.......RRRRRRRRRRRRRRR...............RR....E',
+  '#RRRRRRRR.............R..........RRR.....RRRRRRR.......RRRRRRR...RRR.................RRR...#',
+  '#RRRRRRRR.............RR.........RRR....RRRRRRRRR......RRRRRR..................R.....RRRR.R#',
+  '#RRRRRRRR.............R.........RRRR....RRRRRRRRRR......RR....................RRR.....RRRRR#',
+  '#RRRRR..........................RRRR.....RRRRRRRRRR............................R.......RRRR#',
+  '#RRRR............BBB.BBB........RRRR.....RRRRRRRRRRRRR..................................RRR#',
+  '#RRR..........R..B.....B........RRR.....RRRRRRRRRRRRRR..................................RRR#',
+  '#RRR.........RRR.B.....B.........RR....RRRRRRRRRRRRRR...................RRR.............RRR#',
+  '#RRR..........RR..................RR..RRRRRRRRRRRRRR.....RR........RRRRRRRRR............RRR#',
+  '#RRR.........RR..B.....B..........RRRRRRRRRRRRRRRRRR....RRRR.......RRRRRRRRRR...........RRR#',
+  '#RRR.......RRRR..B.....B..........RRRRRRRRRRRRRRRRRR....RRRRR.......RRRRRRRRRR...........RR#',
+  '#RRR.....RRRRRRR.BBB.BBB.....RR...RRRRRRRRRRRRRRRRRRR...RRRRR.......RRRRRRRRRRR...........R#',
+  '#RRR.....RRRRRRRRRRR.RR......RR...RRRRRRRRRRRRRRRRRRRR...RRRR.......RRRRRRR..RR...........R#',
+  '#RRR.....RRRRRRRRRRR.RRR....RRRR...RRRRRRRRRR......RR....RRRR........RRRRR................R#',
+  '#RR.......RRRRRR..RR.RRRR...RRRRR...RRRRRRRR..............RR...........RR.................R#',
+  '#R.........RRRR....R.RRRRR..RRRRR....RRRRRRR..............................................R#',
+  '#..........RRRR......RRRRR...RRR......RRRRRRR.....................................R.......R#',
+  '#...........RRR.......RRR..............RRRRRRR...................................RRRRR....R#',
+  '#......RR....R........RRR..............RRRRRRRR...R........R......RRR............RRRRRR...R#',
+  '#.....RRRR..........RRRRR..............RRRRRRRR..RRR......RRR....RRRRR...........RRRRR....R#',
+  '#.....RRRR..........RRRRRR.............RRRRRRRR..RRR......RRRR...RRRRBBB.BBB.RRR...RR.....R#',
+  '#R....RRRR..........RRRRRRR............RRRRR.....RRRR......RRR....RRRB.....BRRRR.........RR#',
+  '#R.....RRRR..........RRRRRRR...........RRRR......RRRR.......RR.....RRB.....BRRRR.........RR#',
+  '#RR......RRR............RRRR...........RRRR......RRR......................................R#',
+  '#RRR.....RRRRR...........RR.............RR......RRR..................B.....BRRR...........R#',
+  '#RRR.....RRRRRRR.........RR....................RRR...............RR..B.....BRRR..........RR#',
+  '#RRR....RRRRRRRR.........RR...................RRRR..............RRRR.BBB.BBBRRR.........RRR#',
+  '#RRR...RRRRRRRRR........RRR...................RRRR.............RRRRRRRRR.RRRRRRR.......RRRR#',
+  '#RRRRRRRRRR............RRR....................RRRR.............RRRRRRRRR.RRRRRRRRRRR..RRRRR#',
+  '#RRRRRRRR...............R..............RRR....RRRR..............RRRRRRRR.RRRRRRRRRRRRRRRRRR#',
+  '#RRRRRRR..............................RRRRR...RRRR...............RRRRRRR.RRRRRRRRRRRRRRRRRR#',
+  '#RRRRRR........RR.....................RRRRRR.RRRRR................RRRRRR.RRRRRRRRRRRRRRRRRR#',
+  '#RRRRRR.......RRRR.....................RRRRRRRRRRR................RRRRRR.RRRRRRRRRRRRRRRRRR#',
+  '#RRRRRR....RRRRRRRR....................RRRRRRRRRRR.................RRRRR.RRRRRRRRRRRRRRRRRR#',
+  '#RRRRRR...RRRRRRRRRR..........RRR......RRRRRRRRRRRR.................RRRRRRRRRRRRRRRRRRRRRRR#',
+  '#RRRRRRRRRRRRRRRRRR.........RRRRRRR....RRRRRRRRRRRRRRRR..............RRRRRRRRRRRRRRRRRRRRRR#',
+  '#RRRRRRRRRRRRRRRRRR........RRRRRRRRR...RRRRRRRRRRRRRRRRRRRRRR.......RRRRRRRRRRRRRRRRRRRRRRR#',
+  '#RRRRRRRRRRRRRRRRRRR..RRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRRR....RRRRRRRRRRRRRRRRRRRRRRRR#',
+  '############################################################################################',
 ];
 
 // Where the ceiling lamps hang. They light the place and are most of
 // what makes it feel like somewhere rather than a set of corridors.
 const LAMPS = [
-  [39,2],[55,3],[60,3],[44,4],[34,5],[49,6],[39,7],[54,8],
-  [59,8],[42,11],[50,11],[55,13],[60,13],[46,14],[17,15],[11,16],
-  [23,16],[2,18],[30,18],[54,18],[59,18],[35,19],[48,19],[14,20],
-  [20,20],[9,22],[25,22],[3,23],[30,23],[38,23],[51,23],[56,23],
-  [17,24],[43,24],[12,26],[34,26],[60,26],[6,27],[21,27],[46,28],
-  [51,28],[16,29],[30,29],[41,29],[56,29],[25,30],[9,31],[61,31],
-  [37,32],[19,33],[44,33],[49,33],[54,34],[24,35],[7,36],[40,36],
-  [59,36],[45,38],[50,38],[11,39],[59,41],
+  [7,2],[18,2],[29,2],[34,2],[45,2],[50,2],[71,2],[76,2],
+  [12,3],[55,3],[84,3],[62,4],[3,5],[38,5],[21,6],[80,6],
+  [8,7],[15,7],[33,7],[43,7],[48,7],[58,7],[72,7],[53,8],
+  [65,8],[85,9],[37,10],[76,10],[3,11],[12,11],[18,11],[61,11],
+  [32,12],[42,12],[47,12],[71,12],[81,12],[27,13],[7,14],[22,14],
+  [65,14],[86,14],[15,15],[38,15],[51,15],[75,15],[60,16],[31,17],
+  [43,17],[69,17],[80,17],[10,18],[19,18],[25,18],[48,19],[85,19],
+  [35,20],[14,21],[40,21],[53,21],[28,22],[89,22],[9,23],[19,23],
+  [74,23],[79,23],[48,24],[84,24],[24,25],[32,25],[37,25],[13,26],
+  [53,26],[63,26],[69,26],[18,28],[28,28],[74,28],[81,28],[7,29],
+  [57,29],[36,30],[66,30],[86,30],[12,31],[24,31],[31,32],[61,32],
+  [77,32],[4,33],[18,33],[53,33],[82,33],[9,35],[27,35],[65,35],
+  [87,35],[32,37],[79,37],[4,38],[46,38],[54,38],[61,38],[68,39],
+  [74,39],[84,39],[9,40],[16,40],[26,40],[89,40],[35,41],[50,41],
+  [57,42],[64,42],[78,42],[2,43],[20,43],[30,43],[71,43],[12,44],
+  [38,45],[47,45],[53,45],[86,45],[81,46],[5,47],[16,47],[33,47],
+  [58,47],[63,47],[74,47],[21,48],[28,48],[43,48],[68,48],[37,50],
+  [51,50],[84,50],[5,52],[16,52],[31,52],[56,52],[61,52],[21,53],
+  [41,53],[10,54],[26,54],[35,55],[50,55],[64,56],[30,57],[55,57],
+  [7,58],[20,58],[25,59],[38,59],[60,59],[67,60],
 ];
 
 const COLS = MAP[0].length;
 const ROWS = MAP.length;
 
-const START_COL = 39, START_ROW = 7;
+const START_COL = 8, START_ROW = 7;
 // Eight. A ninth tips the cavern from a hard fight into a
 // guaranteed death -- measured at 12/12 escapes with eight, 0/12 with nine.
-// Twelve. With ten health and graded damage this is finally a dial rather
-// than a cliff: eight guards leaves you on 5 health, twelve on 2, and
-// fourteen is a guaranteed death.
+// Fourteen, on a map more than twice the size.
 const ENEMY_SPAWNS = [
-  [15, 40], [7, 37], [4, 21], [17, 7], [9, 16], [9, 25],
-  [14, 20], [16, 32], [17, 15], [20, 36], [19, 27], [21, 19],
+  [89, 49], [69, 3], [81, 52], [72, 58], [89, 38], [65, 62], [78, 1],
+  [81, 41], [68, 51], [86, 30], [81, 23], [61, 55], [50, 58], [88, 18],
 ];
 // The three keys, in the order you must collect them. Each one lives in
 // a named part of the dungeon; the objective tracker tells you which is
 // next and roughly which way it lies. Nothing is marked on the map.
 // Ordered so most of the journey happens while they are still slow, and
 // the run to the door at the end is short. Legs: 34, 13, 27, 11 steps.
-// Ordered so the long walking happens while the guards are still slow,
-// and the dangerous end of the run is short. Legs: 16, 54, 29, 13 steps.
 const KEYS = [
-  { tile: [55,  7], name: 'Bone Key', place: 'the Ossuary' },
-  { tile: [30, 22], name: 'Iron Key', place: 'the Hollow' },
-  { tile: [10, 31], name: 'Ember Key', place: 'the Deep Vault' },
+  { tile: [72, 48], name: 'Bone Key', place: 'the Ossuary' },
+  { tile: [20, 33], name: 'Iron Key', place: 'the Hollow' },
+  { tile: [85,  5], name: 'Ember Key', place: 'the Deep Vault' },
 ];
 const KEY_TILES = KEYS.map(k => k.tile);
+
+// Where the carts stand. Drive one and you cross the place in a fraction
+// of the time -- but a cart can be beaten to pieces, and you are in it.
+const CART_TILES = [[86,45],[59,59],[68,40],[45,40]];
 const KEYS_NEEDED  = KEY_TILES.length;
 
 function tileAt(col, row) {
@@ -179,10 +210,10 @@ const INVULN_TIME = 1.2;
 // stage is deliberately faster than you are -- once they see you at
 // that point you cannot outrun them, you have to break line of sight.
 const ENEMY_TIERS = [
-  { speed: 1.4, you: 3.0, damage: 1, sight:  5, label: 'PROWLING', colour: [138, 74, 62] },
-  { speed: 2.2, you: 3.3, damage: 2, sight:  7, label: 'HUNTING',  colour: [176, 74, 66] },
-  { speed: 3.0, you: 3.6, damage: 3, sight:  9, label: 'ENRAGED',  colour: [214, 72, 62] },
-  { speed: 4.2, you: 3.9, damage: 4, sight: 10, label: 'FRENZIED', colour: [255, 104, 56] },
+  { speed: 1.9, you: 3.0, damage: 1, sight:  5, label: 'PROWLING', colour: [138, 74, 62] },
+  { speed: 2.7, you: 3.3, damage: 2, sight:  7, label: 'HUNTING',  colour: [176, 74, 66] },
+  { speed: 3.5, you: 3.6, damage: 3, sight:  9, label: 'ENRAGED',  colour: [214, 72, 62] },
+  { speed: 4.7, you: 3.9, damage: 4, sight: 10, label: 'FRENZIED', colour: [255, 104, 56] },
 ];
 function tier() { return ENEMY_TIERS[Math.min(player.keys, ENEMY_TIERS.length - 1)]; }
 
@@ -211,6 +242,12 @@ let SHOUT_TIME    = 7.0;    // how long they keep converging on it
 let NOISE_RANGE   = 9;      // how far your sprinting footsteps carry
 let NOISE_TIME    = 3.5;    // how long they investigate a noise
 let NOISE_EVERY   = 0.55;   // seconds between footfalls while sprinting
+// Carts. Faster than anything on foot, no stamina to spend -- and loud,
+// and breakable, and when one breaks it takes you with it.
+let CART_SPEED    = 7.5;    // tiles per second at the reins
+let CART_HP       = 6;      // hits a cart takes before it goes up
+let CART_REACH    = 1.1;    // how close you must be to climb aboard
+let CART_HITBOX   = 0.62;   // a cart is a bigger target than you are
 let DANGER_RANGE  = 9.0;    // how close a guard has to be before the screen bleeds
 let PATROL_PACE   = 0.55;   // how briskly they walk a beat, as a share of chase speed    // seconds they stagger when the dungeon escalates
 const RADIUS      = 0.22;   // how fat you are, for bumping into walls
@@ -221,7 +258,12 @@ const player = {
   stamina: STAMINA_MAX,
   winded: false,      // ran it all out; slow until you get some back
   sprinting: false,
+  cart: -1,           // index of the cart you are driving, or -1 on foot
 };
+
+let carts = [];
+let explodeTimer = 0;      // the flash when a cart goes up
+let deathCause = '';       // 'guards' or 'cart', for the banner
 
 let enemies = [];
 let keys3d  = [];
@@ -250,6 +292,10 @@ function resetGame() {
   player.stamina = STAMINA_MAX;
   player.winded = false;
   player.sprinting = false;
+  player.cart = -1;
+  carts = CART_TILES.map(([c, r]) => ({ x: c + 0.5, y: r + 0.5, hp: CART_HP }));
+  explodeTimer = 0;
+  deathCause = '';
 
   enemies = ENEMY_SPAWNS.map(([c, r]) => ({
     x: c + 0.5, y: r + 0.5,
@@ -287,6 +333,7 @@ window.addEventListener('keydown', (e) => {
   held[k] = true;
   if (k === 'r' && gameState !== 'playing') resetGame();
   if (k === 'm') showMap = !showMap;
+  if (k === 'e' && gameState === 'playing') toggleCart();
 });
 window.addEventListener('keyup', (e) => { held[e.key.toLowerCase()] = false; });
 
@@ -380,6 +427,38 @@ window.addEventListener('mouseup', (e) => {
   clutch = false;
   rebaseToCursor();     // adopt the cursor's new spot without the view jumping
 });
+
+// The cart you are standing next to, if any
+function cartInReach() {
+  let best = -1, bestD = CART_REACH;
+  carts.forEach((c, i) => {
+    const d = Math.hypot(c.x - player.x, c.y - player.y);
+    if (d < bestD) { bestD = d; best = i; }
+  });
+  return best;
+}
+
+// Climb on, or climb off. Climbing off leaves the cart where you are,
+// with whatever health it has left, so you can come back for it.
+function toggleCart() {
+  if (player.cart >= 0) {
+    const c = carts[player.cart];
+    c.x = player.x; c.y = player.y;
+    player.cart = -1;
+    message = 'You climb down. The cart waits here.';
+    messageTimer = 2;
+    return;
+  }
+  const i = cartInReach();
+  if (i < 0) return;
+  player.cart = i;
+  player.x = carts[i].x; player.y = carts[i].y;
+  player.sprinting = false;
+  message = 'You take the reins. E to climb down.';
+  messageTimer = 2.5;
+}
+
+function riding() { return player.cart >= 0; }
 
 // ---------------------------------------------------------------
 // Moving without walking through walls
@@ -617,6 +696,7 @@ function updateEnemy(enemy, dt) {
 // ---------------------------------------------------------------
 function update(dt) {
   if (messageTimer > 0) { messageTimer -= dt; if (messageTimer <= 0) message = ''; }
+  if (explodeTimer > 0) explodeTimer -= dt;
   if (gameState !== 'playing') return;
 
   lookWithCursor();
@@ -630,7 +710,7 @@ function update(dt) {
   if (held['a'] || held['arrowleft'])  sideways -= 1;
 
   const moving = (forward !== 0 || sideways !== 0);
-  const wantsSprint = (held['shift'] || held['arrowshift']) && moving;
+  const wantsSprint = (held['shift'] || held['arrowshift']) && moving && !riding();
 
   player.sprinting = wantsSprint && !player.winded && player.stamina > 0;
   if (player.sprinting) {
@@ -651,11 +731,13 @@ function update(dt) {
     const rightX = -facingY, rightY = facingX;   // your right hand, 90 degrees round
 
     const pace = player.sprinting ? SPRINT_MULT : (player.winded ? WINDED_MULT : 1);
-    const step = tier().you * pace * dt;
+    const step = (riding() ? CART_SPEED : tier().you * pace) * dt;
     moveBody(player,
       (facingX * forward + rightX * sideways) * step,
       (facingY * forward + rightY * sideways) * step);
   }
+
+  if (riding()) { carts[player.cart].x = player.x; carts[player.cart].y = player.y; }
 
   // --- picking up the key you are currently after ---
   // Only the active one counts, so the order is fixed.
@@ -688,11 +770,12 @@ function update(dt) {
 
   // --- your own footsteps ---
   if (alarm) { alarm.timer -= dt; if (alarm.timer <= 0) alarm = null; }
-  if (player.sprinting) {
+  if (player.sprinting || (riding() && moving)) {
     noiseTimer -= dt;
     if (noiseTimer <= 0) {
       noiseTimer = NOISE_EVERY;
-      raiseAlarm(player.x, player.y, NOISE_RANGE, NOISE_TIME);
+      // a rattling cart carries a good deal further than footsteps
+      raiseAlarm(player.x, player.y, riding() ? NOISE_RANGE * 1.6 : NOISE_RANGE, NOISE_TIME);
     }
   } else {
     noiseTimer = 0;
@@ -710,10 +793,23 @@ function update(dt) {
   if (player.invuln > 0) player.invuln -= dt;
   if (player.invuln <= 0) {
     for (const e of enemies) {
-      if (Math.hypot(e.x - player.x, e.y - player.y) > 0.45) continue;
-      player.health -= tier().damage;
+      if (Math.hypot(e.x - player.x, e.y - player.y) > (riding() ? CART_HITBOX : 0.45)) continue;
       player.invuln = INVULN_TIME;
-      if (player.health <= 0) { player.health = 0; gameState = 'dead'; }
+      if (riding()) {
+        // They beat on the cart, not on you. Until it gives.
+        const c = carts[player.cart];
+        c.hp -= tier().damage;
+        if (c.hp <= 0) {
+          c.hp = 0;
+          explodeTimer = 1.2;
+          deathCause = 'cart';
+          player.health = 0;
+          gameState = 'dead';
+        }
+      } else {
+        player.health -= tier().damage;
+        if (player.health <= 0) { player.health = 0; deathCause = 'guards'; gameState = 'dead'; }
+      }
       break;   // one hit per contact, however many pile on
     }
   }
@@ -1118,6 +1214,77 @@ function drawLamps() {
   for (const l of near) drawLamp(l.x, l.y);
 }
 
+// A cart, side on: a wooden bed on two big wheels.
+const CART = [
+  '..............',
+  '.wwwwwwwwwwww.',
+  '.wddddddddddw.',
+  '.wddddddddddw.',
+  '.wddddddddddw.',
+  '.wwwwwwwwwwww.',
+  '...kk....kk...',
+  '..kkkk..kkkk..',
+  '...kk....kk...',
+];
+const CART_W = CART[0].length, CART_H = CART.length;
+const CART_RUNS = (() => {
+  const cols = [];
+  for (let x = 0; x < CART_W; x++) {
+    const runs = [];
+    let y = 0;
+    while (y < CART_H) {
+      const ch = CART[y][x];
+      let end = y;
+      while (end + 1 < CART_H && CART[end + 1][x] === ch) end++;
+      if (ch !== '.') runs.push({ from: y, to: end + 1, ch });
+      y = end + 1;
+    }
+    cols.push(runs);
+  }
+  return cols;
+})();
+
+function cartColour(ch, f, battered) {
+  const wear = battered ? 0.75 : 1;
+  switch (ch) {
+    case 'w': return shade(134 * wear, 96 * wear, 58 * wear, f);   // frame
+    case 'd': return shade(168 * wear, 124 * wear, 76 * wear, f);  // planks
+    default:  return shade(46, 40, 40, f);                          // wheels
+  }
+}
+
+function drawCart(cart) {
+  const dirX = Math.cos(player.angle), dirY = Math.sin(player.angle);
+  const planeX = -dirY * 0.66, planeY = dirX * 0.66;
+  const sx = cart.x - player.x, sy = cart.y - player.y;
+  const invDet = 1 / (planeX * dirY - dirX * planeY);
+  const tx = invDet * (dirY * sx - dirX * sy);
+  const ty = invDet * (-planeY * sx + planeX * sy);
+  if (ty <= 0.15) return;
+
+  const screenX = (VIEW_W / 2) * (1 + tx / ty);
+  const height = Math.min(VIEW_H * 2, (VIEW_H / ty) * 0.62);
+  const width = height * (CART_W / CART_H);
+  const left = screenX - width / 2;
+  const top = VIEW_H / 2 + horizon + (VIEW_H / ty) * 0.09 - height;
+
+  const f = fog(ty);
+  const battered = cart.hp < CART_HP;
+  const from = Math.max(0, Math.floor(left));
+  const to = Math.min(VIEW_W, Math.ceil(left + width));
+  for (let x = from; x < to; x++) {
+    if (ty >= zBuffer[x]) continue;
+    let col = Math.floor(((x - left) / width) * CART_W);
+    if (col < 0) col = 0; else if (col >= CART_W) col = CART_W - 1;
+    for (const run of CART_RUNS[col]) {
+      const y0 = top + (run.from / CART_H) * height;
+      const y1 = top + (run.to / CART_H) * height;
+      ctx.fillStyle = cartColour(run.ch, f, battered);
+      ctx.fillRect(x, y0, 1, Math.max(1, y1 - y0));
+    }
+  }
+}
+
 // What each guard is doing right now, named. Three states:
 // staggered by a key, hunting you, or walking its beat.
 function guardMode(e) {
@@ -1195,18 +1362,20 @@ function drawSprites() {
   const list = [];
   const active = keys3d[player.keys];
   if (active && !active.taken) list.push({ x: active.x, y: active.y, kind: 'key' });
+  carts.forEach((c, i) => { if (i !== player.cart) list.push({ x: c.x, y: c.y, kind: 'cart', cart: c }); });
   for (const e of enemies) list.push({ x: e.x, y: e.y, kind: 'enemy', alert: e.alert > 0, stunned: e.stun > 0 });
   list.sort((a, b) =>
     Math.hypot(b.x - player.x, b.y - player.y) - Math.hypot(a.x - player.x, a.y - player.y));
 
   for (const s of list) {
     if (s.kind === 'key') { drawSprite(s.x, s.y, 224, 192, 104, 0.28, 0.18); continue; }
+    if (s.kind === 'cart') { drawCart(s.cart); continue; }
     drawPerson(s.x, s.y, s.stunned ? [120, 120, 132] : tier().colour, s.alert && !s.stunned);
   }
 }
 
 function drawMinimap() {
-  const scale = 3, pad = 10;
+  const scale = 2, pad = 10;
   const w = COLS * scale, h = ROWS * scale;
   const ox = VIEW_W - w - pad, oy = pad;
 
@@ -1223,6 +1392,13 @@ function drawMinimap() {
     else                   ctx.fillStyle = '#1c1815';
     ctx.fillRect(ox + c * scale, oy + r * scale, scale, scale);
   }
+
+  // carts you have not taken
+  ctx.fillStyle = '#b08050';
+  carts.forEach((c, i) => {
+    if (i === player.cart) return;
+    ctx.fillRect(ox + c.x * scale - 2, oy + c.y * scale - 2, 4, 4);
+  });
 
   // You, and the way you are looking
   ctx.fillStyle = '#8fd8ff';
@@ -1280,6 +1456,46 @@ function drawObjective() {
   ctx.textBaseline = 'middle';
 }
 
+// When you are in the cart, its front rail sits across the bottom of the
+// view, and the planks split as it takes damage.
+function drawCartFront() {
+  const c = carts[player.cart];
+  const h = 58, top = VIEW_H - h;
+  ctx.fillStyle = '#5a4128';
+  ctx.fillRect(0, top, VIEW_W, h);
+  ctx.fillStyle = '#7a5a38';
+  ctx.fillRect(0, top, VIEW_W, 8);
+  for (let x = 40; x < VIEW_W; x += 80) {           // plank joints
+    ctx.fillStyle = 'rgba(0,0,0,0.35)';
+    ctx.fillRect(x, top + 8, 3, h - 8);
+  }
+  const cracks = CART_HP - c.hp;
+  ctx.strokeStyle = 'rgba(20,10,6,0.9)';
+  ctx.lineWidth = 2;
+  for (let i = 0; i < cracks; i++) {
+    const x = 90 + ((i * 173) % (VIEW_W - 180));
+    ctx.beginPath();
+    ctx.moveTo(x, top + 10);
+    ctx.lineTo(x + 12, top + 26);
+    ctx.lineTo(x - 6, top + 40);
+    ctx.lineTo(x + 8, top + h);
+    ctx.stroke();
+  }
+  ctx.textAlign = 'center';
+  ctx.font = '12px system-ui, sans-serif';
+  ctx.fillStyle = 'rgba(232,223,208,0.75)';
+  ctx.fillText('E to climb down', VIEW_W / 2, top + 24);
+  ctx.textAlign = 'left';
+}
+
+// The bright, brief moment when a cart goes up with you in it
+function drawExplosion() {
+  if (explodeTimer <= 0) return;
+  const a = Math.min(1, explodeTimer / 1.2);
+  ctx.fillStyle = 'rgba(255,' + Math.round(150 + 90 * a) + ',' + Math.round(40 * a) + ',' + (0.95 * a).toFixed(3) + ')';
+  ctx.fillRect(0, 0, VIEW_W, VIEW_H);
+}
+
 function drawHUD() {
   const top = VIEW_H;
   const rowA = top + 22, rowB = top + 48;
@@ -1312,26 +1528,42 @@ function drawHUD() {
   ctx.fillStyle = 'rgb(' + t.colour[0] + ',' + t.colour[1] + ',' + t.colour[2] + ')';
   ctx.fillText(t.label + '  x' + t.damage, 480, rowA);
 
-  // stamina: a single bar that empties as you sprint
-  ctx.fillStyle = '#8b93a7';
   ctx.font = 'bold 13px system-ui, sans-serif';
-  ctx.fillText('STAMINA', 14, rowB);
   const sx2 = 76, sw = 200, sh = 12;
-  ctx.fillStyle = '#2a2f3a';
-  ctx.fillRect(sx2, rowB - sh / 2, sw, sh);
-  const frac = Math.max(0, Math.min(1, player.stamina / STAMINA_MAX));
-  ctx.fillStyle = player.winded ? '#7a5a3a' : (player.sprinting ? '#e0c068' : '#5c8fb0');
-  ctx.fillRect(sx2, rowB - sh / 2, sw * frac, sh);
-  if (player.winded) {
+  if (riding()) {
+    // the cart's condition takes the stamina bar's place while you drive
+    const c = carts[player.cart];
+    ctx.fillStyle = '#8b93a7';
+    ctx.fillText('CART', 14, rowB);
+    ctx.fillStyle = '#2a2f3a';
+    ctx.fillRect(sx2, rowB - sh / 2, sw, sh);
+    const frac = Math.max(0, Math.min(1, c.hp / CART_HP));
+    ctx.fillStyle = frac > 0.5 ? '#a8794a' : (frac > 0.25 ? '#c08a4a' : '#d1495b');
+    ctx.fillRect(sx2, rowB - sh / 2, sw * frac, sh);
     ctx.fillStyle = '#c08a4a';
     ctx.font = 'bold 11px system-ui, sans-serif';
-    ctx.fillText('WINDED', sx2 + sw + 12, rowB);
+    ctx.fillText(c.hp + ' / ' + CART_HP + (c.hp <= 2 ? '   ABOUT TO GO' : ''), sx2 + sw + 12, rowB);
+  } else {
+    // stamina: a single bar that empties as you sprint
+    ctx.fillStyle = '#8b93a7';
+    ctx.fillText('STAMINA', 14, rowB);
+    ctx.fillStyle = '#2a2f3a';
+    ctx.fillRect(sx2, rowB - sh / 2, sw, sh);
+    const frac = Math.max(0, Math.min(1, player.stamina / STAMINA_MAX));
+    ctx.fillStyle = player.winded ? '#7a5a3a' : (player.sprinting ? '#e0c068' : '#5c8fb0');
+    ctx.fillRect(sx2, rowB - sh / 2, sw * frac, sh);
+    if (player.winded) {
+      ctx.fillStyle = '#c08a4a';
+      ctx.font = 'bold 11px system-ui, sans-serif';
+      ctx.fillText('WINDED', sx2 + sw + 12, rowB);
+    }
   }
 
   ctx.textAlign = 'right';
   ctx.font = '11px system-ui, sans-serif';
   ctx.fillStyle = '#5c6478';
-  ctx.fillText('W/S+A/D move   shift to sprint   hold click to reposition', VIEW_W - 14, rowB);
+  ctx.fillText(riding() ? 'W/S+A/D drive   E climb down   hold click to reposition'
+                        : 'W/S+A/D move   shift sprint   E board a cart   hold click to reposition', VIEW_W - 14, rowB);
   ctx.textAlign = 'left';
 }
 
@@ -1368,6 +1600,13 @@ function draw() {
     ctx.fillRect(0, 0, VIEW_W, VIEW_H);
   }
 
+  if (gameState === 'playing' && !riding() && cartInReach() >= 0) {
+    ctx.textAlign = 'center';
+    ctx.font = 'bold 15px system-ui, sans-serif';
+    ctx.fillStyle = '#e8dfd0';
+    ctx.fillText('E  -  take the cart', VIEW_W / 2, VIEW_H - 70);
+    ctx.textAlign = 'left';
+  }
   if (gameState === 'playing' && !pointerInView) {
     ctx.textAlign = 'center';
     ctx.font = '13px system-ui, sans-serif';
@@ -1375,6 +1614,7 @@ function draw() {
     ctx.fillText('move the cursor over the view to steer   -   M toggles the map', VIEW_W / 2, VIEW_H - 16);
     ctx.textAlign = 'left';
   }
+  if (riding()) drawCartFront();
   drawObjective();
   if (showMap) drawMinimap();
 
@@ -1389,7 +1629,11 @@ function draw() {
   drawHUD();
 
   if (gameState === 'won')  drawBanner('YOU ESCAPED', 'Press R to play again', '#7ee081');
-  if (gameState === 'dead') drawBanner('YOU DIED',    'Press R to try again',  '#d1495b');
+  if (gameState === 'dead') {
+    if (deathCause === 'cart') drawBanner('THE CART WENT UP', 'And you with it.  Press R to try again', '#ffb060');
+    else                       drawBanner('YOU DIED',         'Press R to try again',                   '#d1495b');
+  }
+  drawExplosion();
 }
 
 // ---------------------------------------------------------------
