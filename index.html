@@ -45,7 +45,7 @@ const ctx = canvas.getContext('2d');
 
 const VIEW_W = 800;   // width of the 3D view
 const VIEW_H = 460;   // height of the 3D view
-const HUD_H  = 52;    // strip along the bottom
+const HUD_H  = 66;    // strip along the bottom, two rows now
 
 canvas.width  = VIEW_W;
 canvas.height = VIEW_H + HUD_H;
@@ -122,7 +122,13 @@ const ROWS = MAP.length;
 const START_COL = 39, START_ROW = 7;
 // Eight. A ninth tips the cavern from a hard fight into a
 // guaranteed death -- measured at 12/12 escapes with eight, 0/12 with nine.
-const ENEMY_SPAWNS = [[15, 40], [7, 37], [4, 21], [17, 7], [9, 16], [9, 25], [14, 20], [16, 32]];
+// Twelve. With ten health and graded damage this is finally a dial rather
+// than a cliff: eight guards leaves you on 5 health, twelve on 2, and
+// fourteen is a guaranteed death.
+const ENEMY_SPAWNS = [
+  [15, 40], [7, 37], [4, 21], [17, 7], [9, 16], [9, 25],
+  [14, 20], [16, 32], [17, 15], [20, 36], [19, 27], [21, 19],
+];
 // The three keys, in the order you must collect them. Each one lives in
 // a named part of the dungeon; the objective tracker tells you which is
 // next and roughly which way it lies. Nothing is marked on the map.
@@ -162,7 +168,11 @@ for (let r = 0; r < ROWS; r++) for (let c = 0; c < COLS; c++) if (isDoor(c, r)) 
 // ---------------------------------------------------------------
 // Player, enemies, keys
 // ---------------------------------------------------------------
-const MAX_HEALTH  = 4;
+// Ten health, not four. With four, a guard hitting for two or three
+// decided a fight in two hits, so difficulty could only ever be "never
+// touched" or "dead" -- every knob was a cliff. With a longer bar damage
+// accumulates, and the game can sit somewhere in between.
+const MAX_HEALTH  = 10;
 const INVULN_TIME = 1.2;
 
 // Every key you take wakes the dungeon up another notch. The last
@@ -170,18 +180,42 @@ const INVULN_TIME = 1.2;
 // that point you cannot outrun them, you have to break line of sight.
 const ENEMY_TIERS = [
   { speed: 1.4, you: 3.0, damage: 1, sight:  5, label: 'PROWLING', colour: [138, 74, 62] },
-  { speed: 2.2, you: 3.3, damage: 1, sight:  7, label: 'HUNTING',  colour: [176, 74, 66] },
-  { speed: 3.0, you: 3.6, damage: 2, sight:  9, label: 'ENRAGED',  colour: [214, 72, 62] },
-  { speed: 4.2, you: 3.9, damage: 3, sight: 10, label: 'FRENZIED', colour: [255, 104, 56] },
+  { speed: 2.2, you: 3.3, damage: 2, sight:  7, label: 'HUNTING',  colour: [176, 74, 66] },
+  { speed: 3.0, you: 3.6, damage: 3, sight:  9, label: 'ENRAGED',  colour: [214, 72, 62] },
+  { speed: 4.2, you: 3.9, damage: 4, sight: 10, label: 'FRENZIED', colour: [255, 104, 56] },
 ];
 function tier() { return ENEMY_TIERS[Math.min(player.keys, ENEMY_TIERS.length - 1)]; }
 let ALERT_MEMORY  = 2.0;    // seconds it keeps hunting after losing sight of you
 let KEY_RECOIL    = 1.6;    // seconds they stagger when the dungeon escalates
+// Sprinting. You can go faster than your normal pace, but only for a few
+// seconds, and running yourself out leaves you slower than you started.
+// Without this you could simply outrun anything in the open, forever.
+let SPRINT_MULT   = 1.55;   // how much faster a sprint is
+let STAMINA_MAX   = 3.2;    // seconds of sprint from full
+let STAMINA_BURN  = 1.0;    // stamina per second while sprinting
+let STAMINA_REGEN = 0.55;   // stamina per second while not
+let WINDED_MULT   = 0.72;   // your pace once you have run yourself out
+// A guard that spots you shouts, and one that hears something goes to
+// look. Both work the same way: something happens at a PLACE, and guards
+// near enough head for that place. They are told where the noise was,
+// never where you are -- so if you move after making it, they arrive at
+// nothing.
+let SHOUT_RANGE   = 16;     // how far a guard's shout carries
+let SHOUT_TIME    = 7.0;    // how long they keep converging on it
+let NOISE_RANGE   = 9;      // how far your sprinting footsteps carry
+let NOISE_TIME    = 3.5;    // how long they investigate a noise
+let NOISE_EVERY   = 0.55;   // seconds between footfalls while sprinting
 let DANGER_RANGE  = 9.0;    // how close a guard has to be before the screen bleeds
 let PATROL_PACE   = 0.55;   // how briskly they walk a beat, as a share of chase speed    // seconds they stagger when the dungeon escalates
 const RADIUS      = 0.22;   // how fat you are, for bumping into walls
 
-const player = { x: 0, y: 0, angle: 0, health: MAX_HEALTH, invuln: 0, keys: 0 };
+const player = {
+  x: 0, y: 0, angle: 0,
+  health: MAX_HEALTH, invuln: 0, keys: 0,
+  stamina: STAMINA_MAX,
+  winded: false,      // ran it all out; slow until you get some back
+  sprinting: false,
+};
 
 let enemies = [];
 let keys3d  = [];
@@ -207,12 +241,17 @@ function resetGame() {
   player.health = MAX_HEALTH;
   player.invuln = 0;
   player.keys = 0;
+  player.stamina = STAMINA_MAX;
+  player.winded = false;
+  player.sprinting = false;
 
   enemies = ENEMY_SPAWNS.map(([c, r]) => ({
     x: c + 0.5, y: r + 0.5,
     alert: 0,          // seconds left of actively hunting you
     stun: 0,           // seconds left staggering after a key is taken
     patrol: 0,         // which of the guarded places it is walking to
+    respond: 0,        // seconds left heading for a shout or a noise
+    sawYou: false,     // had eyes on you last frame, for spotting the moment
     wanderX: c + 0.5,  // unused while patrolling, kept for the stagger
     wanderY: r + 0.5,
   }));
@@ -227,6 +266,8 @@ function resetGame() {
   repathTimer = 0;
   message = '';
   messageTimer = 0;
+  alarm = null;
+  noiseTimer = 0;
   gameState = 'playing';
 }
 
@@ -414,6 +455,23 @@ function canSee(fromX, fromY, toX, toY) {
 // ---------------------------------------------------------------
 const PATROL_FIELDS = [];
 
+// The last thing worth investigating: where it happened, and a path to it.
+let alarm = null;
+let noiseTimer = 0;
+
+// Something happened at (x, y). Every guard within earshot drops what it
+// is doing and goes to look. The path leads to that spot and nowhere else.
+function raiseAlarm(x, y, range, duration) {
+  const col = Math.floor(x), row = Math.floor(y);
+  if (isWall(col, row)) return;
+  alarm = { x, y, timer: duration, field: buildFlowField(col, row) };
+  for (const e of enemies) {
+    if (e.stun > 0) continue;
+    if (Math.hypot(e.x - x, e.y - y) > range) continue;
+    e.respond = duration;
+  }
+}
+
 function buildPatrolFields() {
   PATROL_FIELDS.length = 0;
   const posts = [];
@@ -469,11 +527,20 @@ function pickWanderSpot(enemy) {
 
 function updateEnemy(enemy, dt) {
   // Still reeling from the last key: it cannot move or look for you
-  if (enemy.stun > 0) { enemy.stun -= dt; return; }
+  if (enemy.stun > 0) { enemy.stun -= dt; enemy.sawYou = false; return; }
 
   // Spot you, and remember you for a few seconds after you break away
-  if (canSee(enemy.x, enemy.y, player.x, player.y)) enemy.alert = ALERT_MEMORY;
-  else if (enemy.alert > 0) enemy.alert -= dt;
+  const sees = canSee(enemy.x, enemy.y, player.x, player.y);
+  if (sees) {
+    // The moment it first lays eyes on you it shouts, and everything
+    // within earshot comes to where you were standing.
+    if (!enemy.sawYou) raiseAlarm(player.x, player.y, SHOUT_RANGE, SHOUT_TIME);
+    enemy.alert = ALERT_MEMORY;
+  } else if (enemy.alert > 0) {
+    enemy.alert -= dt;
+  }
+  enemy.sawYou = sees;
+  if (enemy.respond > 0) enemy.respond -= dt;
 
   let targetX, targetY, speed;
 
@@ -487,6 +554,18 @@ function updateEnemy(enemy, dt) {
       targetY = ((step / COLS) | 0) + 0.5;
     }
     speed = tier().speed;
+  } else if (enemy.respond > 0 && alarm) {
+    // Answering a shout or going to look at a noise: head for the SPOT,
+    // not for you. If you have moved, it arrives at empty ground.
+    const col = Math.floor(enemy.x), row = Math.floor(enemy.y);
+    const step = alarm.field[row * COLS + col];
+    if (step === -1) { targetX = alarm.x; targetY = alarm.y; }
+    else {
+      targetX = (step % COLS) + 0.5;
+      targetY = ((step / COLS) | 0) + 0.5;
+    }
+    if (Math.hypot(alarm.x - enemy.x, alarm.y - enemy.y) < 1.2) enemy.respond = 0;
+    speed = tier().speed * 0.9;
   } else if (PATROL_FIELDS.length) {
     // Patrolling: walking a beat between the places worth guarding
     const post = PATROL_FIELDS[enemy.patrol % PATROL_FIELDS.length];
@@ -539,7 +618,20 @@ function update(dt) {
   if (held['d'] || held['arrowright']) sideways += 1;
   if (held['a'] || held['arrowleft'])  sideways -= 1;
 
-  if (forward !== 0 || sideways !== 0) {
+  const moving = (forward !== 0 || sideways !== 0);
+  const wantsSprint = (held['shift'] || held['arrowshift']) && moving;
+
+  player.sprinting = wantsSprint && !player.winded && player.stamina > 0;
+  if (player.sprinting) {
+    player.stamina -= STAMINA_BURN * dt;
+    if (player.stamina <= 0) { player.stamina = 0; player.winded = true; player.sprinting = false; }
+  } else {
+    player.stamina = Math.min(STAMINA_MAX, player.stamina + STAMINA_REGEN * dt);
+    // you have to get a decent breath back before you can run again
+    if (player.winded && player.stamina > STAMINA_MAX * 0.35) player.winded = false;
+  }
+
+  if (moving) {
     // going forwards and sideways at once should not be faster
     const len = Math.hypot(forward, sideways);
     forward /= len; sideways /= len;
@@ -547,7 +639,8 @@ function update(dt) {
     const facingX = Math.cos(player.angle), facingY = Math.sin(player.angle);
     const rightX = -facingY, rightY = facingX;   // your right hand, 90 degrees round
 
-    const step = tier().you * dt;
+    const pace = player.sprinting ? SPRINT_MULT : (player.winded ? WINDED_MULT : 1);
+    const step = tier().you * pace * dt;
     moveBody(player,
       (facingX * forward + rightX * sideways) * step,
       (facingY * forward + rightY * sideways) * step);
@@ -580,6 +673,18 @@ function update(dt) {
       message = 'Locked. You still need the ' + KEYS[player.keys].name + '.';
       messageTimer = 1.5;
     }
+  }
+
+  // --- your own footsteps ---
+  if (alarm) { alarm.timer -= dt; if (alarm.timer <= 0) alarm = null; }
+  if (player.sprinting) {
+    noiseTimer -= dt;
+    if (noiseTimer <= 0) {
+      noiseTimer = NOISE_EVERY;
+      raiseAlarm(player.x, player.y, NOISE_RANGE, NOISE_TIME);
+    }
+  } else {
+    noiseTimer = 0;
   }
 
   // --- enemies ---
@@ -1005,9 +1110,10 @@ function drawLamps() {
 // What each guard is doing right now, named. Three states:
 // staggered by a key, hunting you, or walking its beat.
 function guardMode(e) {
-  if (e.stun > 0)  return { name: 'STAGGERED',  colour: 'rgb(150,160,180)' };
-  if (e.alert > 0) return { name: 'HUNTING',    colour: 'rgb(255,110,80)'  };
-  return             { name: 'PATROLLING', colour: 'rgb(198,184,158)' };
+  if (e.stun > 0)    return { name: 'STAGGERED',  colour: 'rgb(150,160,180)' };
+  if (e.alert > 0)   return { name: 'HUNTING',    colour: 'rgb(255,110,80)'  };
+  if (e.respond > 0) return { name: 'ALERTED',    colour: 'rgb(240,180,70)'  };
+  return               { name: 'PATROLLING', colour: 'rgb(198,184,158)' };
 }
 
 // Float that word above each guard you can actually see. Uses the same
@@ -1165,39 +1271,56 @@ function drawObjective() {
 
 function drawHUD() {
   const top = VIEW_H;
+  const rowA = top + 22, rowB = top + 48;
   ctx.fillStyle = '#0e1013';
   ctx.fillRect(0, top, VIEW_W, HUD_H);
 
   ctx.textBaseline = 'middle';
   ctx.textAlign = 'left';
-  ctx.fillStyle = '#8b93a7';
   ctx.font = 'bold 13px system-ui, sans-serif';
-  ctx.fillText('HEALTH', 14, top + HUD_H / 2);
 
-  const bw = 38, bh = 15, gap = 5, sx = 82;
+  // health: one block per point, ten of them
+  ctx.fillStyle = '#8b93a7';
+  ctx.fillText('HEALTH', 14, rowA);
+  const hx = 76, segW = 18, segGap = 2, segH = 14;
   for (let i = 0; i < MAX_HEALTH; i++) {
     ctx.fillStyle = i < player.health ? '#d1495b' : '#2a2f3a';
-    ctx.fillRect(sx + i * (bw + gap), top + (HUD_H - bh) / 2, bw, bh);
+    ctx.fillRect(hx + i * (segW + segGap), rowA - segH / 2, segW, segH);
   }
 
   ctx.fillStyle = '#8b93a7';
-  ctx.fillText('KEYS', 268, top + HUD_H / 2);
+  ctx.fillText('KEYS', 296, rowA);
   for (let i = 0; i < KEYS_NEEDED; i++) {
     ctx.fillStyle = i < player.keys ? '#e0c068' : '#2a2f3a';
-    ctx.fillRect(310 + i * 22, top + (HUD_H - 15) / 2, 15, 15);
+    ctx.fillRect(336 + i * 22, rowA - 7, 15, 15);
   }
 
   const t = tier();
   ctx.fillStyle = '#8b93a7';
-  ctx.font = 'bold 13px system-ui, sans-serif';
-  ctx.fillText('THREAT', 392, top + HUD_H / 2);
+  ctx.fillText('THREAT', 424, rowA);
   ctx.fillStyle = 'rgb(' + t.colour[0] + ',' + t.colour[1] + ',' + t.colour[2] + ')';
-  ctx.fillText(t.label + (t.damage > 1 ? '  x' + t.damage : ''), 448, top + HUD_H / 2);
+  ctx.fillText(t.label + '  x' + t.damage, 480, rowA);
+
+  // stamina: a single bar that empties as you sprint
+  ctx.fillStyle = '#8b93a7';
+  ctx.font = 'bold 13px system-ui, sans-serif';
+  ctx.fillText('STAMINA', 14, rowB);
+  const sx2 = 76, sw = 200, sh = 12;
+  ctx.fillStyle = '#2a2f3a';
+  ctx.fillRect(sx2, rowB - sh / 2, sw, sh);
+  const frac = Math.max(0, Math.min(1, player.stamina / STAMINA_MAX));
+  ctx.fillStyle = player.winded ? '#7a5a3a' : (player.sprinting ? '#e0c068' : '#5c8fb0');
+  ctx.fillRect(sx2, rowB - sh / 2, sw * frac, sh);
+  if (player.winded) {
+    ctx.fillStyle = '#c08a4a';
+    ctx.font = 'bold 11px system-ui, sans-serif';
+    ctx.fillText('WINDED', sx2 + sw + 12, rowB);
+  }
 
   ctx.textAlign = 'right';
   ctx.font = '11px system-ui, sans-serif';
   ctx.fillStyle = '#5c6478';
-  ctx.fillText('W/S+A/D move   hold click to reposition', VIEW_W - 14, top + HUD_H / 2);
+  ctx.fillText('W/S+A/D move   shift to sprint   hold click to reposition', VIEW_W - 14, rowB);
   ctx.textAlign = 'left';
 }
 
